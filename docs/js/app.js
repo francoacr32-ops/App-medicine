@@ -5,6 +5,7 @@ import { extraerTexto, tipoDeArchivo, FORMATOS } from "./extraer.js";
 import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
+import { leerPaquete, importarPaquete } from "./paquete.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
 const $app = document.getElementById("app");
@@ -96,6 +97,7 @@ async function vistaInicio() {
      <h2>Elige un año</h2>
      <div class="rejilla">${tarjetas}</div>
      <p class="nota">${docs.length} materiales cargados. ${esc(espacio)}</p>
+     <button class="btn ancho" data-accion="paquete">📥 Cargar paquete de Claude (conferencias, resúmenes y cuestionarios)</button>
      <p class="nota"><a href="#/biblioteca">Ver todos los materiales</a> · <a href="#/ayuda">Cómo usar Finlay</a></p>
      <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>`
   );
@@ -134,14 +136,16 @@ async function vistaAsignatura(id, pestana = "conferencias") {
   const asig = await db.obtenerAsignatura(id);
   if (!asig) return (location.hash = "#/");
   const docs = (await db.documentosDeAsignatura(id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
+  if (pestana === "progreso") return vistaProgreso(asig, docs);
   const tipo = pestana === "libros" ? "libro" : "conferencia";
   const lista = docs.filter((d) => d.tipo === tipo);
 
   const items = lista
     .map(
       (d) => `<li class="doc">
-        <a href="#/leer/${d.id}/${d.primera ?? 1}" class="doc-nombre">${tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
-        <span class="sub">${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
+        <a href="#/doc/${d.id}" class="doc-nombre">${tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
+        <span class="sub">${d.paginas ? `${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}` : "sin texto completo"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
+        ${d.resumen || d.cuestionario ? `<span class="etiquetas">${d.resumen ? '<span class="chip">📋 Resumen</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
         <span class="acciones">
           <button class="btn mini" data-accion="exportar" data-id="${d.id}">📤 Exportar texto</button>
           <button class="btn mini peligro" data-accion="quitar" data-id="${d.id}">Quitar</button>
@@ -164,6 +168,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
      <nav class="pestanas">
        <a href="${enlaceAsig(id)}/conferencias" class="${tipo === "conferencia" ? "activa" : ""}">Conferencias</a>
        <a href="${enlaceAsig(id)}/libros" class="${tipo === "libro" ? "activa" : ""}">Libros</a>
+       <a href="${enlaceAsig(id)}/progreso">Progreso</a>
      </nav>
      <ul class="docs">${items || `<li class="vacio">No hay ${tipo === "libro" ? "libros" : "conferencias"} todavía.</li>`}</ul>
      <button class="btn ancho" data-accion="cargar" data-asig="${esc(id)}" data-tipo="${tipo}">
@@ -256,12 +261,209 @@ async function vistaLeer(docId, pagina, q) {
      <button class="btn ancho" data-accion="leer-pagina">🔊 Escuchar esta página</button>
      <div class="pagina">${resaltar(texto, patrones).replace(/\n/g, "<br>")}</div>
      ${nav}`,
-    q ? `#/buscar/${encodeURIComponent(doc.asignaturas[0])}?q=${encodeURIComponent(q)}` : enlaceAsig(doc.asignaturas[0]) + (doc.tipo === "libro" ? "/libros" : "")
+    `#/doc/${docId}/texto`
   );
   if (q) $atras.dataset.destino = "historial";
   vistaLeer.texto = texto;
   const primera = $app.querySelector("mark");
   if (primera) primera.scrollIntoView({ block: "center" });
+}
+
+// ---------- Pantalla: un documento (resumen, cuestionario y texto completo) ----------
+const NOMBRE_TIPO = { multiple: "Selección múltiple", vf: "Verdadero o falso", abierta: "Pregunta y respuesta" };
+
+async function vistaDoc(docId, pestana) {
+  const doc = await db.obtenerDocumento(docId);
+  if (!doc) return (location.hash = "#/");
+  if (!pestana) pestana = doc.resumen ? "resumen" : doc.cuestionario ? "cuestionario" : "texto";
+  const asigActual = doc.asignaturas[0];
+  const base = `#/doc/${docId}`;
+  const pestanas = `<nav class="pestanas">
+      <a href="${base}/resumen" class="${pestana === "resumen" ? "activa" : ""}">Resumen</a>
+      <a href="${base}/cuestionario" class="${pestana === "cuestionario" ? "activa" : ""}">Cuestionario</a>
+      <a href="${base}/texto" class="${pestana === "texto" ? "activa" : ""}">Completa</a>
+    </nav>`;
+  const pedirAClaude = (que) => `<div class="no-encontrado"><b>Todavía no hay ${que}.</b>
+      <p>${doc.paginas ? `Pulsa <b>📤 Exportar texto</b> y mándale el archivo a Claude. Él te devolverá un paquete con el ${que}.` : ""}</p>
+      ${doc.paginas ? `<button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto</button>` : ""}</div>`;
+
+  let cuerpo = "";
+  if (pestana === "resumen") {
+    if (!doc.resumen?.length) cuerpo = pedirAClaude("resumen");
+    else {
+      cuerpo =
+        `<button class="btn ancho" data-accion="leer-resumen">🔊 Escuchar el resumen</button>` +
+        doc.resumen
+          .map(
+            (s) => `<section class="seccion-resumen">
+              ${s.titulo ? `<h3>${esc(s.titulo)}</h3>` : ""}
+              <div>${esc(s.texto).replace(/\n/g, "<br>")}</div>
+              ${s.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(s.fuente)}</p>` : ""}
+            </section>`
+          )
+          .join("");
+    }
+  } else if (pestana === "cuestionario") {
+    cuerpo = doc.cuestionario?.length ? await htmlCuestionario(doc) : pedirAClaude("cuestionario");
+  } else {
+    cuerpo = doc.paginas
+      ? `<p>${doc.paginas} ${doc.etiqueta === "diap." ? "diapositivas" : "páginas"} con texto.</p>
+         <a class="btn ancho" href="#/leer/${doc.id}/${doc.primera ?? 1}">📖 Leer completa</a>
+         <form class="buscador" data-ambito="${esc(asigActual)}">
+           <input name="q" type="search" placeholder="Buscar en ${esc(asigActual.split("|")[1])}…" required>
+           <button class="btn">Buscar</button></form>
+         <button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>`
+      : `<p class="vacio">Este material solo tiene resumen y cuestionario (no tiene el texto completo).</p>`;
+  }
+
+  poner(
+    doc.nombre,
+    `<p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>${pestanas}${cuerpo}`,
+    enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
+  );
+  vistaDoc.doc = doc;
+}
+
+async function htmlCuestionario(doc) {
+  const resp = new Map((await db.respuestasDe(doc.id)).map((r) => [r.indice, r]));
+  const filtro = vistaDoc.filtro || "todas";
+  const preguntas = doc.cuestionario
+    .map((p, i) => ({ p, i }))
+    .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro));
+  const chips = [["todas", "Todas"], ["multiple", "Selección"], ["vf", "V o F"], ["abierta", "Preguntas"], ["falladas", "❗ Las que fallé"]]
+    .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
+    .join("");
+  const tarjetas = preguntas
+    .map(({ p, i }) => {
+      let opciones = "";
+      if (p.tipo === "multiple")
+        opciones = p.opciones
+          .map((o, j) => `<button class="opcion" data-accion="responder" data-i="${i}" data-r="${j}">${"ABCDEFG"[j]}) ${esc(o)}</button>`)
+          .join("");
+      else if (p.tipo === "vf")
+        opciones = `<button class="opcion" data-accion="responder" data-i="${i}" data-r="true">Verdadero</button>
+                    <button class="opcion" data-accion="responder" data-i="${i}" data-r="false">Falso</button>`;
+      else opciones = `<button class="btn mini" data-accion="ver-respuesta" data-i="${i}">👁 Ver respuesta</button>`;
+      const previa = resp.get(i);
+      return `<article class="pregunta" id="p${i}">
+        <p class="sub">${i + 1}. ${NOMBRE_TIPO[p.tipo]}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
+        <p class="enunciado">${esc(p.pregunta)}</p>
+        <div class="opciones">${opciones}</div>
+        <div class="explicacion" hidden></div>
+      </article>`;
+    })
+    .join("");
+  const total = doc.cuestionario.length;
+  const bien = [...resp.values()].filter((r) => r.ultima).length;
+  return `<p class="marcador" id="marcador">Respondidas ${resp.size} de ${total} · Correctas ${bien}</p>
+    <div class="chips">${chips}</div>
+    ${tarjetas || `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
+    <button class="btn mini peligro abajo" data-accion="reiniciar">Empezar de cero este cuestionario</button>`;
+}
+
+async function responder(i, valor) {
+  const doc = vistaDoc.doc;
+  const p = doc.cuestionario[i];
+  const tarjeta = document.getElementById("p" + i);
+  let correcta;
+  if (p.tipo === "multiple") correcta = Number(valor) === p.correcta;
+  else if (p.tipo === "vf") correcta = (valor === "true") === p.respuesta;
+  else correcta = valor === "si";
+
+  tarjeta.querySelectorAll(".opcion").forEach((b) => {
+    b.disabled = true;
+    const r = b.dataset.r;
+    const esLaBuena = p.tipo === "multiple" ? Number(r) === p.correcta : (r === "true") === p.respuesta;
+    if (esLaBuena) b.classList.add("bien");
+    else if (r === String(valor)) b.classList.add("mal");
+  });
+  tarjeta.querySelectorAll("[data-accion=autoevaluar]").forEach((b) => (b.disabled = true));
+
+  const caja = tarjeta.querySelector(".explicacion");
+  const encabezado = p.tipo === "abierta" ? "" : `<b>${correcta ? "✅ ¡Correcto!" : "❌ Incorrecto."}</b> `;
+  const respuestaTexto =
+    p.tipo === "multiple" ? `La respuesta correcta es ${"ABCDEFG"[p.correcta]}) ${p.opciones[p.correcta]}.` :
+    p.tipo === "vf" ? `Es ${p.respuesta ? "verdadero" : "falso"}.` : "";
+  if (p.tipo !== "abierta") {
+    caja.innerHTML = `${encabezado}${esc(respuestaTexto)}
+      ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
+      ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
+      <button class="btn mini" data-accion="leer-explicacion" data-i="${i}">🔊 Escuchar</button>`;
+    caja.hidden = false;
+  }
+  await db.guardarRespuesta(doc.id, i, correcta);
+  const resp = await db.respuestasDe(doc.id);
+  document.getElementById("marcador").textContent =
+    `Respondidas ${resp.length} de ${doc.cuestionario.length} · Correctas ${resp.filter((r) => r.ultima).length}`;
+}
+
+function verRespuesta(i) {
+  const doc = vistaDoc.doc;
+  const p = doc.cuestionario[i];
+  const tarjeta = document.getElementById("p" + i);
+  tarjeta.querySelector("[data-accion=ver-respuesta]").remove();
+  const caja = tarjeta.querySelector(".explicacion");
+  caja.innerHTML = `<p><b>Respuesta:</b> ${esc(p.respuesta).replace(/\n/g, "<br>")}</p>
+    ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
+    ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
+    <p class="sub">¿La sabías?</p>
+    <div class="acciones">
+      <button class="btn mini" data-accion="autoevaluar" data-i="${i}" data-r="si">✅ La sabía</button>
+      <button class="btn mini peligro" data-accion="autoevaluar" data-i="${i}" data-r="no">❌ No la sabía</button>
+      <button class="btn mini" data-accion="leer-explicacion" data-i="${i}">🔊 Escuchar</button>
+    </div>`;
+  caja.hidden = false;
+}
+
+// ---------- Pestaña: progreso de una asignatura ----------
+async function estadoDe(doc) {
+  const total = doc.cuestionario.length;
+  const resp = await db.respuestasDe(doc.id);
+  const bien = resp.filter((r) => r.ultima).length;
+  const pct = Math.round((bien / total) * 100);
+  let estado = "sin-empezar";
+  if (resp.length) estado = pct >= 80 && resp.length === total ? "dominado" : pct >= 60 ? "en-camino" : "repasar";
+  return { total, respondidas: resp.length, bien, pct, estado };
+}
+
+const ESTADOS = {
+  dominado: "✅ Dominado",
+  "en-camino": "🟡 En camino",
+  repasar: "🔴 Repasar",
+  "sin-empezar": "⚪ Sin empezar",
+};
+
+async function vistaProgreso(asig, docs) {
+  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
+  const filas = await Promise.all(conPreguntas.map(async (d) => ({ d, e: await estadoDe(d) })));
+  const orden = { repasar: 0, "en-camino": 1, "sin-empezar": 2, dominado: 3 };
+  filas.sort((a, b) => orden[a.e.estado] - orden[b.e.estado] || a.e.pct - b.e.pct);
+  const dominados = filas.filter((f) => f.e.estado === "dominado").length;
+  const id = asig.id;
+
+  poner(
+    asig.nombre,
+    `<p class="migas">${esc(ANIOS[asig.anio - 1])}</p>
+     <nav class="pestanas">
+       <a href="${enlaceAsig(id)}/conferencias">Conferencias</a>
+       <a href="${enlaceAsig(id)}/libros">Libros</a>
+       <a href="${enlaceAsig(id)}/progreso" class="activa">Progreso</a>
+     </nav>
+     ${filas.length
+       ? `<p class="resumen-progreso">Dominas <b>${dominados}</b> de <b>${filas.length}</b> temas.</p>
+          <ul class="docs">${filas
+            .map(
+              ({ d, e }) => `<li class="doc">
+              <a class="doc-nombre" href="#/doc/${d.id}/cuestionario">${esc(d.nombre)}</a>
+              <span class="sub">${ESTADOS[e.estado]} · ${e.bien} de ${e.total} correctas</span>
+              <span class="barra-progreso"><span class="${e.estado}" style="width:${e.pct}%"></span></span>
+            </li>`
+            )
+            .join("")}</ul>
+          <p class="nota">🔴 Repasar: menos del 60 % · 🟡 En camino: 60–79 % · ✅ Dominado: 80 % o más, con todas respondidas.</p>`
+       : `<p class="vacio">Todavía no hay cuestionarios en esta asignatura. Cuando cargues un paquete de Claude, aquí verás qué temas dominas y cuáles debes repasar.</p>`}`,
+    `#/anio/${asig.anio}`
+  );
 }
 
 // ---------- Pantalla: todos los materiales ----------
@@ -272,7 +474,7 @@ async function vistaBiblioteca() {
     docs.length
       ? `<ul class="docs">${docs
           .map(
-            (d) => `<li class="doc"><a class="doc-nombre" href="#/leer/${d.id}/${d.primera ?? 1}">${d.tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
+            (d) => `<li class="doc"><a class="doc-nombre" href="#/doc/${d.id}">${d.tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
             <span class="sub">${esc(d.asignaturas.map(nombreAsig).join(" · "))}</span></li>`
           )
           .join("")}</ul>`
@@ -455,6 +657,56 @@ document.addEventListener("click", async (ev) => {
     voz.leer(`${r.doc.nombre}, ${r.etiqueta === "diap." ? "diapositiva" : r.etiqueta === "parte" ? "parte" : "página"} ${r.pagina}. ${r.texto}`, velocidadVoz());
   } else if (accion === "leer-pagina") {
     voz.leer(vistaLeer.texto, velocidadVoz());
+  } else if (accion === "paquete") {
+    $paquete.value = "";
+    $paquete.click();
+  } else if (accion === "filtro") {
+    vistaDoc.filtro = b.dataset.filtro;
+    router();
+  } else if (accion === "responder" || accion === "autoevaluar") {
+    responder(Number(b.dataset.i), b.dataset.r);
+  } else if (accion === "ver-respuesta") {
+    verRespuesta(Number(b.dataset.i));
+  } else if (accion === "leer-resumen") {
+    const d = vistaDoc.doc;
+    voz.leer(`Resumen de ${d.nombre}. ` + d.resumen.map((s) => `${s.titulo || ""}. ${s.texto}`).join(" "), velocidadVoz());
+  } else if (accion === "leer-explicacion") {
+    const p = vistaDoc.doc.cuestionario[Number(b.dataset.i)];
+    const r =
+      p.tipo === "multiple" ? `La respuesta correcta es: ${p.opciones[p.correcta]}.` :
+      p.tipo === "vf" ? `Es ${p.respuesta ? "verdadero" : "falso"}.` : `Respuesta: ${p.respuesta}.`;
+    voz.leer(`${p.pregunta} ${r} ${p.explicacion || ""}`, velocidadVoz());
+  } else if (accion === "reiniciar") {
+    if (confirm("¿Borrar tus respuestas de este cuestionario y empezar de cero?")) {
+      await db.borrarRespuestas(vistaDoc.doc.id);
+      router();
+    }
+  }
+});
+
+// Cargar paquetes de Claude
+const $paquete = document.getElementById("paquete");
+$paquete.addEventListener("change", async () => {
+  const archivo = $paquete.files[0];
+  if (!archivo) return;
+  try {
+    mostrarProgreso("Leyendo el paquete…");
+    const datos = await leerPaquete(archivo);
+    if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+    const r = await importarPaquete(datos, mostrarProgreso);
+    mostrarProgreso(null);
+    alert(
+      `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n\n` +
+      `• Materiales nuevos: ${r.nuevos}\n• Materiales actualizados: ${r.actualizados}\n` +
+      `• Resúmenes: ${r.resumenes}\n• Preguntas: ${r.preguntas}`
+    );
+    const anios = [...new Set(datos.materiales.map((m) => m.anio))];
+    location.hash = anios.length === 1 ? `#/anio/${anios[0]}` : "#/";
+    router();
+  } catch (e) {
+    mostrarProgreso(null);
+    console.error(e);
+    alert("No se pudo cargar el paquete:\n" + (e?.name === "QuotaExceededError" ? "No queda espacio en el teléfono." : e.message));
   }
 });
 
@@ -512,6 +764,11 @@ async function router() {
     else if (partes[0] === "asig") await vistaAsignatura(partes[1], partes[2]);
     else if (partes[0] === "buscar") await vistaBuscar(partes[1], q);
     else if (partes[0] === "leer") await vistaLeer(partes[1], Number(partes[2]), q);
+    else if (partes[0] === "doc") {
+      if (vistaDoc.docId !== partes[1]) vistaDoc.filtro = "todas";
+      vistaDoc.docId = partes[1];
+      await vistaDoc(partes[1], partes[2]);
+    }
     else if (partes[0] === "biblioteca") await vistaBiblioteca();
     else if (partes[0] === "ayuda") vistaAyuda();
     else await vistaInicio();

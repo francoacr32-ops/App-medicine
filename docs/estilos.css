@@ -150,3 +150,39 @@ mark { background: var(--marca); color: inherit; border-radius: 3px; padding: 0 
   border: 0; border-radius: 999px; padding: 12px 18px; font: inherit; font-weight: 600;
   background: var(--peligro); color: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.3);
 }
+
+/* ---------- Resúmenes, cuestionarios y progreso ---------- */
+.etiquetas, .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips { margin: 8px 0 14px; }
+.chip {
+  display: inline-block; font: inherit; font-size: .8rem; padding: 3px 10px; border-radius: 999px;
+  background: var(--fondo); color: var(--suave); border: 1px solid var(--borde);
+}
+button.chip { cursor: pointer; padding: 6px 12px; }
+.chip.activa { background: var(--acento); color: var(--acento-texto); border-color: var(--acento); }
+
+.seccion-resumen, .pregunta {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+  padding: 12px 14px; margin-bottom: 12px;
+}
+.seccion-resumen h3 { margin: 0 0 6px; font-size: 1.05rem; color: var(--acento); }
+.fuente { color: var(--suave); font-size: .85rem; margin: 8px 0 0; }
+.marcador { font-weight: 600; margin: 8px 0; }
+.enunciado { font-weight: 600; margin: 4px 0 10px; }
+.opciones { display: flex; flex-direction: column; gap: 8px; }
+.opcion {
+  font: inherit; text-align: left; cursor: pointer; padding: 10px 12px; border-radius: 10px;
+  background: var(--fondo); color: var(--texto); border: 1px solid var(--borde);
+}
+.opcion:disabled { cursor: default; opacity: .85; }
+.opcion.bien { background: #d7f2dc; border-color: #2e7d32; color: #12391a; opacity: 1; }
+.opcion.mal { background: #fbdcd9; border-color: var(--peligro); color: #4a0f0b; opacity: 1; }
+.explicacion { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--borde); }
+.explicacion p { margin: 6px 0; }
+
+.resumen-progreso { font-size: 1.05rem; }
+.barra-progreso { display: block; height: 8px; background: var(--borde); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+.barra-progreso span { display: block; height: 100%; background: var(--suave); }
+.barra-progreso .dominado { background: #2e7d32; }
+.barra-progreso .en-camino { background: #f9a825; }
+.barra-progreso .repasar { background: var(--peligro); }

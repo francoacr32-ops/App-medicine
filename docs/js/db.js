@@ -1,23 +1,31 @@
 // Base de datos local de Finlay (IndexedDB): todo se guarda en el teléfono.
 
 const NOMBRE_DB = "finlay";
-const VERSION_DB = 1;
+const VERSION_DB = 2;
 let dbPromesa = null;
 
 function abrir() {
   if (dbPromesa) return dbPromesa;
   dbPromesa = new Promise((resolver, rechazar) => {
     const pet = indexedDB.open(NOMBRE_DB, VERSION_DB);
-    pet.onupgradeneeded = () => {
+    pet.onupgradeneeded = (ev) => {
       const db = pet.result;
-      // Asignaturas: id = "1|Morfofisiología"
-      db.createObjectStore("asignaturas", { keyPath: "id" });
-      // Documentos (conferencias y libros). Un libro puede estar en varias asignaturas.
-      const docs = db.createObjectStore("documentos", { keyPath: "id" });
-      docs.createIndex("asignaturas", "asignaturas", { multiEntry: true });
-      // Fragmentos de texto para buscar (uno o varios por página)
-      const frag = db.createObjectStore("fragmentos", { autoIncrement: true });
-      frag.createIndex("docId", "docId");
+      if (ev.oldVersion < 1) {
+        // Asignaturas: id = "1|Morfofisiología"
+        db.createObjectStore("asignaturas", { keyPath: "id" });
+        // Documentos (conferencias y libros). Un libro puede estar en varias asignaturas.
+        // Cada documento puede llevar también su resumen y su cuestionario.
+        const docs = db.createObjectStore("documentos", { keyPath: "id" });
+        docs.createIndex("asignaturas", "asignaturas", { multiEntry: true });
+        // Fragmentos de texto para buscar (uno o varios por página)
+        const frag = db.createObjectStore("fragmentos", { autoIncrement: true });
+        frag.createIndex("docId", "docId");
+      }
+      if (ev.oldVersion < 2) {
+        // Respuestas de los cuestionarios (para el progreso). id = "docId|númeroDePregunta"
+        const resp = db.createObjectStore("respuestas", { keyPath: "id" });
+        resp.createIndex("docId", "docId");
+      }
     };
     pet.onsuccess = () => resolver(pet.result);
     pet.onerror = () => rechazar(pet.error);
@@ -132,6 +140,38 @@ export async function borrarDocumento(docId) {
   };
   await finTransaccion(tx);
   cacheFragmentos.delete(docId);
+  await borrarRespuestas(docId);
+}
+
+// ---------- Respuestas de cuestionarios (progreso) ----------
+/** Guarda si la pregunta se respondió bien. Se conserva el historial de aciertos. */
+export async function guardarRespuesta(docId, indice, correcta) {
+  const alm = await almacen("respuestas", "readwrite");
+  const id = `${docId}|${indice}`;
+  const previa = (await promesa(alm.get(id))) || { id, docId, indice, aciertos: 0, fallos: 0 };
+  previa.ultima = correcta;
+  previa.fecha = Date.now();
+  correcta ? previa.aciertos++ : previa.fallos++;
+  await promesa(alm.put(previa));
+}
+
+export async function respuestasDe(docId) {
+  const indice = (await almacen("respuestas")).index("docId");
+  return promesa(indice.getAll(docId));
+}
+
+export async function borrarRespuestas(docId) {
+  const db = await abrir();
+  const tx = db.transaction("respuestas", "readwrite");
+  const pet = tx.objectStore("respuestas").index("docId").openKeyCursor(IDBKeyRange.only(docId));
+  pet.onsuccess = () => {
+    const c = pet.result;
+    if (c) {
+      tx.objectStore("respuestas").delete(c.primaryKey);
+      c.continue();
+    }
+  };
+  await finTransaccion(tx);
 }
 
 // ---------- Fragmentos ----------
