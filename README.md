@@ -39,13 +39,14 @@ materiales se quedan en tu teléfono** y nunca se suben a internet.
 Además de instalarse desde Chrome, Finlay se puede construir como APK (para pasarla por Zapya):
 
 ```
-python herramientas/construir_apk.py --android-jar android-all.jar --dx dx.jar \
+python herramientas/construir_apk.py --android-jar android-all.jar --dx dx.jar --apksig apksig.jar \
     --keystore finlay.keystore --salida Finlay.apk --version-code 2 --version-name 1.1
 ```
 
 - `android/src/` contiene la ventana Android (WebView) con puentes para voz, elegir archivos y guardar/enviar.
 - `android-all.jar` (org.robolectric:android-all:10-robolectric-5803371) y `dx.jar`
-  (com.jakewharton.android.repackaged:dalvik-dx:16.0.1) se descargan de Maven Central.
+  (com.jakewharton.android.repackaged:dalvik-dx:16.0.1) y `apksig.jar` (com.android.tools.build:apksig:2.3.0)
+  se descargan de Maven Central. El APK apunta a Android 14 (targetSdk 34) y va firmado con v1 + v2.
 - **Guarda la llave `finlay.keystore`**: las actualizaciones deben firmarse con la misma llave.
 
 ## Estructura del código

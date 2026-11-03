@@ -1,12 +1,14 @@
 """Construye el APK de Finlay sin el SDK de Android (solo Java + dx + jarsigner).
 
 Uso:
-  python herramientas/construir_apk.py --android-jar android-all.jar --dx dx.jar \
-      --keystore finlay.keystore --salida Finlay.apk [--version-code 1 --version-name 1.0]
+  python herramientas/construir_apk.py --android-jar android-all.jar --dx dx.jar --apksig apksig.jar \
+      --keystore finlay.keystore --salida Finlay.apk [--version-code 2 --version-name 1.1]
 
 Piezas:
   - android-all.jar  (org.robolectric:android-all:10-robolectric-5803371, en Maven Central)
   - dx.jar           (com.jakewharton.android.repackaged:dalvik-dx:16.0.1, en Maven Central)
+  - apksig.jar       (com.android.tools.build:apksig:2.3.0, en Maven Central): solo para verificar la firma
+  La firma v1 la hace jarsigner y la v2 se calcula aquí (apksig 2.3.0 no funciona con Java moderno).
   - keystore         se crea con keytool la primera vez (¡guárdalo! sin él no se puede actualizar la app)
 
 El manifiesto binario (AXML) y resources.arsc se codifican aquí mismo, porque aapt2
@@ -142,7 +144,11 @@ def manifiesto(version_code, version_name):
         a("versionCode", T_DEC, version_code),
         a("versionName", T_STR, version_name),
     ], [
-        Elemento("uses-sdk", [a("minSdkVersion", T_DEC, 21), a("targetSdkVersion", T_DEC, 29)]),
+        Elemento("uses-sdk", [a("minSdkVersion", T_DEC, 21), a("targetSdkVersion", T_DEC, 34)]),
+        # Desde Android 11 hay que declarar qué servicios externos se usan: aquí, el motor de voz
+        Elemento("queries", [], [
+            Elemento("intent", [], [Elemento("action", [a("name", T_STR, "android.intent.action.TTS_SERVICE")])]),
+        ]),
         Elemento("application", [
             a("label", T_STR, "Finlay"),
             a("icon", T_REF, ICONO),
@@ -194,6 +200,48 @@ def arsc(ruta_icono):
     return struct.pack("<HHII", 0x0002, 12, total, 1) + valores + paquete
 
 
+# ---------------------------------------------------------------- firma v2 (APK Signature Scheme v2)
+def firmar_v2(apk, keystore, clave):
+    """Añade el bloque de firma v2 a un APK ya firmado con v1 y alineado.
+
+    Sigue la especificación de Android: resumen SHA-256 por trozos de 1 MiB de las secciones
+    (entradas, directorio central, fin de directorio) y firma RSA PKCS#1 v1.5 (algoritmo 0x0103).
+    """
+    import hashlib
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.serialization import pkcs12
+
+    llave, cert, _ = pkcs12.load_key_and_certificates(Path(keystore).read_bytes(), clave.encode())
+    datos = Path(apk).read_bytes()
+    eocd = datos.rfind(b"PK\x05\x06")
+    tam_cd, off_cd = struct.unpack_from("<II", datos, eocd + 12)
+    seccion_a, seccion_c, seccion_d = datos[:off_cd], datos[off_cd:off_cd + tam_cd], datos[eocd:]
+
+    def trozos(b):
+        return [b[i:i + 1048576] for i in range(0, len(b), 1048576)]
+    lista = trozos(seccion_a) + trozos(seccion_c) + trozos(seccion_d)
+    resumenes = b"".join(hashlib.sha256(b"\xa5" + struct.pack("<I", len(t)) + t).digest() for t in lista)
+    resumen = hashlib.sha256(b"\x5a" + struct.pack("<I", len(lista)) + resumenes).digest()
+
+    def lp(b):
+        return struct.pack("<I", len(b)) + b
+    ALG = 0x0103
+    cert_der = cert.public_bytes(serialization.Encoding.DER)
+    datos_firmados = lp(lp(struct.pack("<I", ALG) + lp(resumen))) + lp(lp(cert_der)) + lp(b"")
+    firma = llave.sign(datos_firmados, padding.PKCS1v15(), hashes.SHA256())
+    clave_publica = cert.public_key().public_bytes(serialization.Encoding.DER,
+                                                   serialization.PublicFormat.SubjectPublicKeyInfo)
+    firmante = lp(datos_firmados) + lp(lp(struct.pack("<I", ALG) + lp(firma))) + lp(clave_publica)
+    valor = lp(lp(firmante))
+    par = struct.pack("<QI", 4 + len(valor), 0x7109871A) + valor
+    tam_bloque = len(par) + 8 + 16
+    bloque = struct.pack("<Q", tam_bloque) + par + struct.pack("<Q", tam_bloque) + b"APK Sig Block 42"
+    nuevo_eocd = bytearray(seccion_d)
+    struct.pack_into("<I", nuevo_eocd, 16, off_cd + len(bloque))
+    Path(apk).write_bytes(seccion_a + bloque + seccion_c + bytes(nuevo_eocd))
+
+
 # ---------------------------------------------------------------- construcción
 def ejecutar(cmd):
     print("$", " ".join(str(c) for c in cmd))
@@ -204,6 +252,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--android-jar", required=True)
     p.add_argument("--dx", required=True)
+    p.add_argument("--apksig", required=True)
     p.add_argument("--keystore", required=True)
     p.add_argument("--clave", default=os.environ.get("FINLAY_CLAVE", "finlay-local"))
     p.add_argument("--salida", default="Finlay.apk")
@@ -225,8 +274,8 @@ def main():
     with zipfile.ZipFile(sin_firmar, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("AndroidManifest.xml", axml(manifiesto(args.version_code, args.version_name)))
         z.writestr(zipfile.ZipInfo("resources.arsc"), arsc("res/drawable/icono.png"), compress_type=zipfile.ZIP_STORED)
-        z.write(dex, "classes.dex")
         z.write(RAIZ / "docs" / "iconos" / "icono-192.png", "res/drawable/icono.png", compress_type=zipfile.ZIP_STORED)
+        z.write(dex, "classes.dex")
         for f in sorted((RAIZ / "docs").rglob("*")):
             if f.is_file():
                 z.write(f, "assets/www/" + f.relative_to(RAIZ / "docs").as_posix())
@@ -235,8 +284,32 @@ def main():
         ejecutar(["keytool", "-genkeypair", "-keystore", args.keystore, "-alias", "finlay", "-keyalg", "RSA",
                   "-keysize", "2048", "-validity", "10000", "-storepass", args.clave, "-keypass", args.clave,
                   "-dname", "CN=Finlay, O=Finlay, C=CU"])
+    # 1) Firma v1 (JAR) con jarsigner
     ejecutar(["jarsigner", "-keystore", args.keystore, "-storepass", args.clave, "-keypass", args.clave,
               "-sigalg", "SHA256withRSA", "-digestalg", "SHA-256", str(sin_firmar), "finlay"])
+    # 2) Realinear: lo que va sin comprimir debe empezar en múltiplo de 4 (Android 11+)
+    alineado = tmp / "alineado.apk"
+    with zipfile.ZipFile(sin_firmar) as ent, zipfile.ZipFile(alineado, "w") as sal:
+        for info in ent.infolist():
+            datos = ent.read(info)
+            nueva = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+            nueva.compress_type = info.compress_type
+            if info.compress_type == zipfile.ZIP_STORED:
+                inicio = sal.fp.tell() + 30 + len(info.filename.encode("utf-8"))
+                nueva.extra = b"\x00" * ((4 - inicio % 4) % 4)
+            sal.writestr(nueva, datos)
+    sin_firmar = alineado
+    # 3) Firma v2 (Android 11+ la exige para apps que apuntan a Android 11 o más)
+    firmar_v2(sin_firmar, args.keystore, args.clave)
+    # 4) Verificar con apksig, la biblioteca oficial de Android
+    verificador = tmp / "verificar"
+    verificador.mkdir()
+    ejecutar(["javac", "-nowarn", "-cp", args.apksig, "-d", str(verificador),
+              str(RAIZ / "herramientas" / "firmar" / "Verificar.java")])
+    abrir = []   # apksig 2.3.0 usa clases internas de Java (sun.security.*)
+    for paquete in ("sun.security.x509", "sun.security.pkcs", "sun.security.util"):
+        abrir += ["--add-exports", "java.base/" + paquete + "=ALL-UNNAMED"]
+    ejecutar(["java"] + abrir + ["-cp", args.apksig + os.pathsep + str(verificador), "Verificar", str(sin_firmar)])
     shutil.copy(sin_firmar, args.salida)
     print(f"\n✅ {args.salida} ({Path(args.salida).stat().st_size // 1024} KB)")
 
