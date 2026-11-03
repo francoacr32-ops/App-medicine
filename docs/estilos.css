@@ -209,3 +209,53 @@ button.chip { cursor: pointer; padding: 6px 12px; }
 .fila-vf.mal, .fila-enlace.mal, .marca.mal, .hueco.mal { background: #fbdcd9; border-color: var(--peligro); color: #4a0f0b; }
 .falto { font-size: .85rem; font-weight: 600; color: var(--peligro); }
 .bien .falto { color: #12391a; }
+
+/* ---------- Inicio: panel de estudio y accesos ---------- */
+.panel {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
+  padding: 14px; margin-bottom: 14px;
+}
+.panel .grande { margin: 0 0 6px; }
+.centro { text-align: center; }
+.racha { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: .95rem; }
+.panel .btn.ancho { margin-bottom: 4px; }
+.plan-hoy {
+  display: block; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+  background: var(--fondo); color: var(--texto); text-decoration: none; border-left: 4px solid var(--acento);
+}
+.accesos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+.accesos a {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 4px;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+  text-decoration: none; font-size: 1.4rem; color: var(--texto);
+}
+.accesos span { font-size: .8rem; font-weight: 600; }
+
+/* ---------- Modo examen ---------- */
+.form-examen, .form-plan { display: flex; flex-direction: column; gap: 12px; }
+.form-examen label, .form-plan label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.form-examen label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+.form-examen input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--acento); }
+.barra-examen {
+  position: sticky; top: 52px; z-index: 4; display: flex; justify-content: space-between;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 8px 12px; margin-bottom: 10px; font-weight: 600;
+}
+.modo-examen [data-accion=comprobar] { display: none; }
+.opcion.elegida { border-color: var(--acento); background: var(--acento); color: var(--acento-texto); }
+.nota-grande { font-size: 3.5rem; font-weight: 800; margin: 0; line-height: 1; }
+.nota-num { display: inline-block; min-width: 1.8em; text-align: center; border-radius: 8px; color: #fff; margin-right: 6px; }
+.n5, .n4 { color: #2e7d32; } .n3 { color: #c77c00; } .n2 { color: var(--peligro); }
+.nota-num.n5, .nota-num.n4 { background: #2e7d32; color: #fff; }
+.nota-num.n3 { background: #c77c00; color: #fff; }
+.nota-num.n2 { background: var(--peligro); color: #fff; }
+.lista-temas { text-align: left; padding-left: 20px; margin: 6px 0; }
+.lista-temas li { margin-bottom: 4px; }
+
+/* ---------- Plan de examen ---------- */
+.cuenta { font-size: 1.2rem; margin: 6px 0 0; }
+.dia { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 10px 14px; margin-bottom: 10px; }
+.dia .sub { font-weight: 600; margin: 0; }
+.dia .sub::first-letter { text-transform: uppercase; }
+.dia.hoy { border: 2px solid var(--acento); }
+.dia.pasado { opacity: .55; }

@@ -14,6 +14,15 @@ materiales se quedan en tu teléfono** y nunca se suben a internet.
 - **Voz**: lee en voz alta con la voz del teléfono (gratis, sin internet).
 - **Exportar texto** de una conferencia (archivo pequeño) para que Claude prepare
   resúmenes y cuestionarios.
+- **Paquetes de Claude**: conferencias completas + resumen + cuestionario, por año.
+- **Cuestionarios estilo examen cubano**: V o F, marque con X, enlace, complete,
+  selección única y pregunta-respuesta, con explicación y fuente.
+- **🧠 Repaso del día** con repetición espaciada, **🔥 racha** y meta diaria.
+- **📝 Modo examen** con cronómetro y nota de 2 a 5.
+- **📅 Plan para el examen**: cuenta regresiva y temas repartidos por día.
+- **🎧 Escuchar** todos los resúmenes de una asignatura seguidos.
+- **💾 Copia de seguridad** y **📲 compartir** con compañeros (Zapya, Bluetooth, WhatsApp).
+- **Progreso** por asignatura: dominado, en camino, repasar.
 - Funciona **sin conexión** después de abrirla la primera vez. Abrir la app
   gasta ≈ 50 KB; el lector de PDF/Word (≈ 600 KB comprimido) se descarga solo
   la primera vez que cargas un archivo.
@@ -38,5 +47,8 @@ docs/                 ← la app (lo que publica GitHub Pages)
   js/buscar.js        ← buscador con puntuación (BM25)
   js/texto.js         ← normalizar texto (tildes, plurales) y fragmentar
   js/voz.js           ← lectura en voz alta
+  js/paquete.js       ← importar paquetes y copias
+  js/cuestionario.js  ← tipos de pregunta y corrección
+  js/estudio.js       ← repaso espaciado, racha, examen, plan y copias
   lib/                ← pdf.js (Mozilla, Apache 2.0) y JSZip (MIT)
 ```

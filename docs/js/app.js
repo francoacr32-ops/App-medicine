@@ -6,7 +6,8 @@ import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
-import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta } from "./cuestionario.js";
+import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata } from "./cuestionario.js";
+import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
 const $app = document.getElementById("app");
@@ -89,9 +90,33 @@ async function vistaInicio() {
       <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></a>`;
   }).join("");
 
+  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
+  let panel = "";
+  if (conPreguntas.length) {
+    const { racha, hoy: deHoy } = calcularRacha(await db.listarDiario());
+    const meta = metaDiaria();
+    const { lista } = preguntasDelRepaso(conPreguntas, await db.todasLasRespuestas(), meta);
+    const pct = Math.min(100, Math.round((deHoy.preguntas / meta) * 100));
+    panel = `<section class="panel">
+        <div class="racha"><span>🔥 <b>${racha}</b> día${racha === 1 ? "" : "s"} seguido${racha === 1 ? "" : "s"}</span>
+          <span>Hoy: <b>${deHoy.preguntas}</b> de ${meta} preguntas${deHoy.preguntas >= meta ? " ✅" : ""}</span></div>
+        <span class="barra-progreso"><span class="${pct >= 100 ? "dominado" : "en-camino"}" style="width:${pct}%"></span></span>
+        ${lista.length
+          ? `<a class="btn ancho" href="#/repaso">🧠 Repaso del día (${lista.length} preguntas)</a>`
+          : `<p class="centro">🧠 Repaso del día: ¡estás al día! 🎉</p>`}
+        ${await planDeHoy()}
+      </section>`;
+  }
   poner(
     "Finlay",
-    `<form class="buscador" data-ambito="todo">
+    `${panel}
+     <nav class="accesos">
+       <a href="#/examen">📝<span>Examen</span></a>
+       <a href="#/planes">📅<span>Plan</span></a>
+       <a href="#/copia">💾<span>Copia</span></a>
+       <a href="#/ayuda">❓<span>Ayuda</span></a>
+     </nav>
+     <form class="buscador" data-ambito="todo">
        <input name="q" type="search" placeholder="Buscar en toda la carrera…" autocomplete="off" required>
        <button class="btn">Buscar</button>
      </form>
@@ -177,6 +202,11 @@ async function vistaAsignatura(id, pestana = "conferencias") {
      ${otrosLibros.length ? `<details class="compartir"><summary>📚 Usar un libro que ya cargaste en otra asignatura</summary>
         <ul>${otrosLibros.map((d) => `<li><button class="btn mini" data-accion="vincular" data-id="${d.id}" data-asig="${esc(id)}">＋</button> ${esc(d.nombre)}</li>`).join("")}</ul>
         <p class="nota">Así el libro no se guarda dos veces.</p></details>` : ""}
+     <div class="acciones abajo">
+       ${docs.some((d) => d.resumen?.length) ? `<button class="btn mini" data-accion="escuchar-asig" data-asig="${esc(id)}">🎧 Escuchar todos los resúmenes</button>` : ""}
+       ${docs.some((d) => d.cuestionario?.length) ? `<a class="btn mini" href="#/examen/${encodeURIComponent(id)}">📝 Examen de esta asignatura</a>` : ""}
+       <a class="btn mini" href="#/planes">📅 Poner fecha de examen</a>
+     </div>
      <button class="btn mini peligro abajo" data-accion="borrar-asig" data-asig="${esc(id)}">Borrar asignatura</button>`,
     `#/anio/${asig.anio}`
   );
@@ -324,62 +354,59 @@ async function vistaDoc(docId, pestana) {
   vistaDoc.doc = doc;
 }
 
-async function htmlCuestionario(doc) {
-  const resp = new Map((await db.respuestasDe(doc.id)).map((r) => [r.indice, r]));
-  const filtro = vistaDoc.filtro || "todas";
-  const preguntas = doc.cuestionario
-    .map((p, i) => ({ p, i }))
-    .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro));
-  // Solo se muestran los filtros de los tipos que hay en este cuestionario
-  const tipos = new Set(doc.cuestionario.map((p) => p.tipo));
-  const chips = [["todas", "Todas"], ...Object.entries(NOMBRE_TIPO).filter(([k]) => tipos.has(k)), ["falladas", "❗ Las que fallé"]]
-    .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
-    .join("");
-  const tarjetas = preguntas
-    .map(({ p, i }) => {
-      const previa = resp.get(i);
-      return `<article class="pregunta" id="p${i}">
-        <p class="sub">${i + 1}. ${NOMBRE_TIPO[p.tipo]}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
-        <p class="enunciado">${htmlEnunciado(p)}</p>
-        <div class="opciones">${htmlOpciones(p, i)}</div>
-        <div class="explicacion" hidden></div>
-      </article>`;
-    })
-    .join("");
-  const total = doc.cuestionario.length;
-  const bien = [...resp.values()].filter((r) => r.ultima).length;
-  return `<p class="marcador" id="marcador">Respondidas ${resp.size} de ${total} · Correctas ${bien}</p>
-    <div class="chips">${chips}</div>
-    ${tarjetas || `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
-    <button class="btn mini peligro abajo" data-accion="reiniciar">Empezar de cero este cuestionario</button>`;
+// ---------- Motor de preguntas (sirve para el cuestionario, el repaso y el examen) ----------
+let enPantalla = []; // posición en pantalla → { doc, i }
+let modo = "normal"; // "normal" | "examen"
+let alResponder = () => {};
+const elegidasExamen = new Map();
+
+function htmlTarjeta(k, previa = null, conOrigen = false) {
+  const { doc, i } = enPantalla[k];
+  const p = doc.cuestionario[i];
+  const titulo = conOrigen ? `${k + 1}. ${esc(doc.nombre)} · ${NOMBRE_TIPO[p.tipo]}` : `${i + 1}. ${NOMBRE_TIPO[p.tipo]}`;
+  return `<article class="pregunta" id="p${k}">
+    <p class="sub">${titulo}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
+    <p class="enunciado">${htmlEnunciado(p)}</p>
+    <div class="opciones">${htmlOpciones(p, k)}</div>
+    <div class="explicacion" hidden></div>
+  </article>`;
 }
 
-async function responder(i, valor) {
-  const doc = vistaDoc.doc;
+function mostrarCorreccion(k, r, sinResponder = false) {
+  const { doc, i } = enPantalla[k];
   const p = doc.cuestionario[i];
-  const tarjeta = document.getElementById("p" + i);
+  const parcial = r.total > 1 ? ` (${r.aciertos} de ${r.total} bien)` : "";
+  const titulo = sinResponder ? "⚪ Sin responder." : r.correcta ? "✅ ¡Correcto!" : `❌ Incorrecto${parcial}.`;
+  const caja = document.querySelector(`#p${k} .explicacion`);
+  caja.innerHTML = `<b>${titulo}</b> ${esc(textoRespuesta(p))}
+    ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
+    ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
+    <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>`;
+  caja.hidden = false;
+}
+
+async function responder(k, valor) {
+  const { doc, i } = enPantalla[k];
+  const p = doc.cuestionario[i];
+  const tarjeta = document.getElementById("p" + k);
+  if (modo === "examen") {
+    // En el examen solo se marca la elección; se corrige todo al entregar
+    elegidasExamen.set(k, valor);
+    tarjeta.querySelectorAll(".opcion").forEach((b) => b.classList.toggle("elegida", b.dataset.r === String(valor)));
+    alResponder(k);
+    return;
+  }
   const r = corregir(p, tarjeta, valor);
   if (!r) return aviso("Responde todas las partes antes de comprobar.");
-
-  if (p.tipo !== "abierta") {
-    const parcial = r.total > 1 ? ` (${r.aciertos} de ${r.total} bien)` : "";
-    const caja = tarjeta.querySelector(".explicacion");
-    caja.innerHTML = `<b>${r.correcta ? "✅ ¡Correcto!" : "❌ Incorrecto" + parcial + "."}</b> ${esc(textoRespuesta(p))}
-      ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
-      ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
-      <button class="btn mini" data-accion="leer-explicacion" data-i="${i}">🔊 Escuchar</button>`;
-    caja.hidden = false;
-  }
+  if (p.tipo !== "abierta") mostrarCorreccion(k, r);
   await db.guardarRespuesta(doc.id, i, r.correcta);
-  const resp = await db.respuestasDe(doc.id);
-  document.getElementById("marcador").textContent =
-    `Respondidas ${resp.length} de ${doc.cuestionario.length} · Correctas ${resp.filter((x) => x.ultima).length}`;
+  alResponder(k, r);
 }
 
-function verRespuesta(i) {
-  const doc = vistaDoc.doc;
+function verRespuesta(k) {
+  const { doc, i } = enPantalla[k];
   const p = doc.cuestionario[i];
-  const tarjeta = document.getElementById("p" + i);
+  const tarjeta = document.getElementById("p" + k);
   tarjeta.querySelector("[data-accion=ver-respuesta]").remove();
   const caja = tarjeta.querySelector(".explicacion");
   caja.innerHTML = `<p><b>Respuesta:</b> ${esc(p.respuesta).replace(/\n/g, "<br>")}</p>
@@ -387,11 +414,364 @@ function verRespuesta(i) {
     ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
     <p class="sub">¿La sabías?</p>
     <div class="acciones">
-      <button class="btn mini" data-accion="autoevaluar" data-i="${i}" data-r="si">✅ La sabía</button>
-      <button class="btn mini peligro" data-accion="autoevaluar" data-i="${i}" data-r="no">❌ No la sabía</button>
-      <button class="btn mini" data-accion="leer-explicacion" data-i="${i}">🔊 Escuchar</button>
+      <button class="btn mini" data-accion="autoevaluar" data-i="${k}" data-r="si">✅ La sabía</button>
+      <button class="btn mini peligro" data-accion="autoevaluar" data-i="${k}" data-r="no">❌ No la sabía</button>
+      <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>
     </div>`;
   caja.hidden = false;
+}
+
+// ---------- Cuestionario de un documento ----------
+async function htmlCuestionario(doc) {
+  modo = "normal";
+  enPantalla = doc.cuestionario.map((_, i) => ({ doc, i }));
+  const resp = new Map((await db.respuestasDe(doc.id)).map((r) => [r.indice, r]));
+  const filtro = vistaDoc.filtro || "todas";
+  const visibles = doc.cuestionario
+    .map((p, i) => ({ p, i }))
+    .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro));
+  const tipos = new Set(doc.cuestionario.map((p) => p.tipo));
+  const chips = [["todas", "Todas"], ...Object.entries(NOMBRE_TIPO).filter(([k]) => tipos.has(k)), ["falladas", "❗ Las que fallé"]]
+    .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
+    .join("");
+  alResponder = async () => {
+    const r = await db.respuestasDe(doc.id);
+    document.getElementById("marcador").textContent =
+      `Respondidas ${r.length} de ${doc.cuestionario.length} · Correctas ${r.filter((x) => x.ultima).length}`;
+  };
+  const bien = [...resp.values()].filter((r) => r.ultima).length;
+  return `<p class="marcador" id="marcador">Respondidas ${resp.size} de ${doc.cuestionario.length} · Correctas ${bien}</p>
+    <div class="chips">${chips}</div>
+    ${visibles.map(({ i }) => htmlTarjeta(i, resp.get(i))).join("") ||
+      `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
+    <button class="btn mini peligro abajo" data-accion="reiniciar">Empezar de cero este cuestionario</button>`;
+}
+
+// ---------- Pantalla: repaso del día ----------
+async function vistaRepaso() {
+  modo = "normal";
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  const respuestas = await db.todasLasRespuestas();
+  const { lista } = preguntasDelRepaso(docs, respuestas, metaDiaria());
+  enPantalla = lista;
+  if (!lista.length) {
+    return poner(
+      "Repaso del día",
+      docs.length
+        ? `<div class="panel centro"><p class="grande">🎉 ¡Estás al día!</p><p>No te toca repasar nada hoy. Vuelve mañana o haz un <a href="#/examen">📝 examen de práctica</a>.</p></div>`
+        : `<p class="vacio">Todavía no tienes cuestionarios. Carga un paquete de Claude para empezar.</p>`,
+      "#/"
+    );
+  }
+  let hechas = 0;
+  let bien = 0;
+  alResponder = async (k, r) => {
+    hechas++;
+    if (r.correcta) bien++;
+    document.getElementById("marcador").textContent = `Repaso de hoy: ${hechas} de ${lista.length} · Correctas ${bien}`;
+    if (hechas === lista.length) {
+      const { racha } = calcularRacha(await db.listarDiario());
+      document.getElementById("fin").innerHTML = `<div class="panel centro">
+        <p class="grande">🎉 ¡Repaso terminado!</p>
+        <p>Acertaste ${bien} de ${lista.length}. 🔥 Racha: ${racha} día${racha === 1 ? "" : "s"}.</p>
+        <p class="nota">Las que fallaste volverán mañana; las que acertaste, dentro de unos días.</p>
+        <a class="btn" href="#/">Volver al inicio</a></div>`;
+      document.getElementById("fin").scrollIntoView({ behavior: "smooth" });
+    }
+  };
+  poner(
+    "Repaso del día",
+    `<p class="marcador" id="marcador">Repaso de hoy: 0 de ${lista.length}</p>
+     <p class="nota">Preguntas elegidas para hoy: primero las que te toca repasar y luego algunas nuevas.</p>
+     ${lista.map((_, k) => htmlTarjeta(k, null, true)).join("")}
+     <div id="fin"></div>`,
+    "#/"
+  );
+}
+
+// ---------- Pantalla: modo examen ----------
+async function opcionesDeAmbito() {
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  const asigs = await db.listarAsignaturas();
+  const opciones = [`<option value="todo">Toda la carrera</option>`];
+  for (let a = 1; a <= 6; a++) {
+    const delAnio = asigs.filter((x) => x.anio === a && docs.some((d) => d.asignaturas.includes(x.id)));
+    if (!delAnio.length) continue;
+    opciones.push(`<option value="anio:${a}">${ANIOS[a - 1]} (completo)</option>`);
+    delAnio.forEach((x) => opciones.push(`<option value="${esc(x.id)}">&nbsp;&nbsp;${esc(ANIOS[a - 1])} › ${esc(x.nombre)}</option>`));
+  }
+  return { docs, opciones: opciones.join("") };
+}
+
+async function vistaExamenInicio(ambitoInicial) {
+  const { docs, opciones } = await opcionesDeAmbito();
+  const historial = (await db.listarExamenes()).sort((a, b) => b.fecha - a.fecha).slice(0, 8);
+  poner(
+    "Modo examen",
+    docs.length
+      ? `<form class="form-examen">
+          <label>¿De qué?<select name="ambito">${opciones}</select></label>
+          <label>¿Cuántas preguntas?<select name="n">${[10, 20, 30, 50].map((n) => `<option ${n === 20 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+          <label class="check"><input type="checkbox" name="reloj" checked> Con cronómetro (1 minuto y medio por pregunta)</label>
+          <button class="btn ancho">📝 Empezar examen</button>
+        </form>
+        <p class="nota">Las respuestas se corrigen al entregar. Nota según la escala cubana: 5 Excelente (90 % o más), 4 Bien (80 %), 3 Aprobado (70 %), 2 Desaprobado.</p>
+        ${historial.length ? `<h2>Tus últimos exámenes</h2><ul class="docs">${historial
+          .map((e) => `<li class="doc"><span><b class="nota-num n${e.nota}">${e.nota}</b> ${esc(e.titulo)}</span>
+             <span class="sub">${new Date(e.fecha).toLocaleDateString("es")} · ${e.porcentaje} % · ${e.cantidad} preguntas</span></li>`)
+          .join("")}</ul>` : ""}`
+      : `<p class="vacio">Todavía no tienes cuestionarios. Carga un paquete de Claude para empezar.</p>`,
+    "#/"
+  );
+  const sel = $app.querySelector("select[name=ambito]");
+  if (sel && ambitoInicial) sel.value = ambitoInicial;
+}
+
+let relojExamen = null;
+
+async function vistaExamen(ambito, cantidad, conReloj) {
+  const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length);
+  const lista = preguntasDeExamen(docs, cantidad);
+  if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
+  modo = "examen";
+  enPantalla = lista;
+  elegidasExamen.clear();
+  const titulo = `Examen de ${nombreAmbito(ambito)}`;
+  alResponder = () => contarExamen();
+  poner(
+    "Examen",
+    `<div class="barra-examen"><span id="contador">Respondidas 0 de ${lista.length}</span><span id="reloj"></span></div>
+     <div id="resultado-examen"></div>
+     <p class="migas">${esc(titulo)} · ${lista.length} preguntas</p>
+     ${lista.map((_, k) => htmlTarjeta(k, null, true)).join("")}
+     <button class="btn ancho" data-accion="entregar">📤 Entregar examen</button>`,
+    "#/examen"
+  );
+  $app.classList.add("modo-examen");
+  vistaExamen.datos = { titulo, ambito, lista };
+  if (conReloj) {
+    let segundos = lista.length * 90;
+    const pintar = () => {
+      const r = document.getElementById("reloj");
+      if (r) r.textContent = `⏱ ${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
+    };
+    pintar();
+    relojExamen = setInterval(() => {
+      segundos--;
+      pintar();
+      if (segundos <= 0) {
+        aviso("⏱ Se acabó el tiempo. Corrigiendo…");
+        entregarExamen();
+      }
+    }, 1000);
+  }
+}
+
+function respondidaEnExamen(k) {
+  if (elegidasExamen.has(k)) return true;
+  const t = document.getElementById("p" + k);
+  return [...t.querySelectorAll("input")].some((x) => (x.type === "text" || !x.type ? x.value.trim() : x.checked)) ||
+    [...t.querySelectorAll("select")].some((s) => s.value !== "");
+}
+
+function contarExamen() {
+  const c = document.getElementById("contador");
+  if (c) c.textContent = `Respondidas ${enPantalla.filter((_, k) => respondidaEnExamen(k)).length} de ${enPantalla.length}`;
+}
+
+async function entregarExamen() {
+  if (modo !== "examen") return;
+  clearInterval(relojExamen);
+  modo = "revision";
+  $app.classList.remove("modo-examen");
+  let puntos = 0;
+  const fallados = new Map();
+  for (const [k, { doc, i }] of enPantalla.entries()) {
+    const p = doc.cuestionario[i];
+    const tarjeta = document.getElementById("p" + k);
+    tarjeta.querySelectorAll(".elegida").forEach((x) => x.classList.remove("elegida"));
+    const inmediata = esInmediata(p);
+    let r;
+    let sinResponder = false;
+    if (inmediata && !elegidasExamen.has(k)) {
+      // Sin responder: se muestra cuál era la correcta
+      corregir(p, tarjeta, p.tipo === "multiple" ? "-1" : String(!p.respuesta));
+      tarjeta.querySelectorAll(".mal").forEach((x) => x.classList.remove("mal"));
+      r = { correcta: false, aciertos: 0, total: 1 };
+      sinResponder = true;
+    } else {
+      r = corregir(p, tarjeta, elegidasExamen.get(k));
+      if (!r) {
+        tarjeta.querySelectorAll("input, select, button").forEach((x) => (x.disabled = true));
+        r = { correcta: false, aciertos: 0, total: 1 };
+        sinResponder = !respondidaEnExamen(k);
+      }
+    }
+    puntos += r.aciertos / r.total;
+    mostrarCorreccion(k, r, sinResponder);
+    await db.guardarRespuesta(doc.id, i, r.correcta);
+    if (!r.correcta) fallados.set(doc.id, { doc, n: (fallados.get(doc.id)?.n || 0) + 1 });
+  }
+  const { titulo, ambito, lista } = vistaExamen.datos;
+  const porcentaje = Math.round((puntos / lista.length) * 100);
+  const n = nota(porcentaje);
+  await db.guardarExamen({ fecha: Date.now(), titulo, ambito, cantidad: lista.length, porcentaje, nota: n.nota });
+  document.querySelector("[data-accion=entregar]")?.remove();
+  document.getElementById("reloj").textContent = `Nota: ${n.nota}`;
+  document.getElementById("resultado-examen").innerHTML = `<div class="panel centro">
+      <p class="nota-grande n${n.nota}">${n.nota}</p>
+      <p class="grande">${n.texto}</p>
+      <p>${porcentaje} % de respuestas correctas (${puntos.toFixed(1).replace(".0", "")} de ${lista.length}).</p>
+      ${fallados.size ? `<p><b>Temas para repasar:</b></p><ul class="lista-temas">${[...fallados.values()]
+        .sort((a, b) => b.n - a.n)
+        .map(({ doc, n }) => `<li><a href="#/doc/${doc.id}/resumen">${esc(doc.nombre)}</a> — ${n} fallo${n > 1 ? "s" : ""}</li>`)
+        .join("")}</ul>` : "<p>¡Sin fallos! 🎉</p>"}
+      <p class="nota">Abajo puedes ver la corrección de cada pregunta.</p>
+      <a class="btn" href="#/examen/${encodeURIComponent(ambito)}">Hacer otro examen</a>
+    </div>`;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ---------- Pantalla: plan para el examen ----------
+async function temasConEstado(asigId) {
+  const docs = (await db.documentosDeAsignatura(asigId)).filter((d) => d.tipo === "conferencia" || d.cuestionario?.length);
+  const temas = await Promise.all(
+    docs.map(async (doc) => (doc.cuestionario?.length ? { doc, ...(await estadoDe(doc)) } : { doc, estado: "sin-empezar", pct: 0 }))
+  );
+  const orden = { repasar: 0, "sin-empezar": 1, "en-camino": 2, dominado: 3 };
+  return temas.sort((a, b) => orden[a.estado] - orden[b.estado] || a.pct - b.pct ||
+    a.doc.nombre.localeCompare(b.doc.nombre, "es", { numeric: true }));
+}
+
+function textoDias(n) {
+  return n === 0 ? "¡es hoy!" : n === 1 ? "mañana" : n < 0 ? "ya pasó" : `en ${n} días`;
+}
+
+async function vistaPlanes() {
+  const planes = (await db.listarPlanes()).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const asigs = await db.listarAsignaturas();
+  poner(
+    "Plan para el examen",
+    `${planes.length ? `<ul class="docs">${planes
+        .map((p) => `<li class="doc"><a class="doc-nombre" href="#/plan/${p.id}">📅 ${esc(p.nombre)} — ${esc(nombreAsig(p.asignatura))}</a>
+          <span class="sub">${new Date(p.fecha + "T00:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })} · ${textoDias(diasHasta(p.fecha))}</span>
+          <span class="acciones"><button class="btn mini peligro" data-accion="borrar-plan" data-id="${p.id}">Borrar</button></span></li>`)
+        .join("")}</ul>` : `<p class="vacio">Todavía no has puesto ninguna fecha de examen.</p>`}
+     ${asigs.length ? `<h2>Añadir un examen</h2>
+     <form class="form-plan">
+       <label>Asignatura<select name="asignatura">${asigs.map((a) => `<option value="${esc(a.id)}">${esc(nombreAsig(a.id))}</option>`).join("")}</select></label>
+       <label>¿Qué examen?<input name="nombre" value="Prueba final" required maxlength="60"></label>
+       <label>Fecha<input name="fecha" type="date" required min="${db.hoy()}"></label>
+       <button class="btn ancho">📅 Crear plan de estudio</button>
+     </form>` : `<p class="nota">Primero añade tus asignaturas.</p>`}`,
+    "#/"
+  );
+}
+
+async function vistaPlan(id) {
+  const plan = (await db.listarPlanes()).find((p) => p.id === id);
+  if (!plan) return (location.hash = "#/planes");
+  const temas = await temasConEstado(plan.asignatura);
+  const dias = repartirPlan(plan.fecha, temas);
+  const faltan = diasHasta(plan.fecha);
+  const hoyStr = db.hoy();
+  poner(
+    plan.nombre,
+    `<div class="panel centro"><p class="grande">📅 ${esc(plan.nombre)}</p>
+       <p>${esc(nombreAsig(plan.asignatura))}</p>
+       <p class="cuenta">${faltan > 0 ? `Faltan <b>${faltan}</b> día${faltan === 1 ? "" : "s"}` : textoDias(faltan)}</p></div>
+     ${temas.length ? "" : `<p class="vacio">Esta asignatura todavía no tiene conferencias.</p>`}
+     ${dias.map((d) => `<section class="dia ${d.fecha === hoyStr ? "hoy" : d.fecha < hoyStr ? "pasado" : ""}">
+        <p class="sub">${d.fecha === hoyStr ? "👉 HOY · " : ""}${new Date(d.fecha + "T00:00:00").toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" })}</p>
+        ${d.repasoGeneral
+          ? `<p>🔁 Repaso general: <a href="#/examen/${encodeURIComponent(plan.asignatura)}">haz un examen de práctica</a> y repasa los temas en 🔴.</p>`
+          : `<ul class="lista-temas">${d.temas.map((t) => `<li><a href="#/doc/${t.doc.id}">${esc(t.doc.nombre)}</a> <span class="sub">${ESTADOS[t.estado]}</span></li>`).join("")}</ul>`}
+      </section>`).join("")}
+     <p class="nota">El plan pone primero los temas más flojos y se actualiza según tus resultados en los cuestionarios.</p>`,
+    "#/planes"
+  );
+}
+
+/** Lo que toca hoy según el examen más cercano (para la pantalla de inicio). */
+async function planDeHoy() {
+  const planes = (await db.listarPlanes()).filter((p) => diasHasta(p.fecha) >= 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (!planes.length) return "";
+  const plan = planes[0];
+  const dias = repartirPlan(plan.fecha, await temasConEstado(plan.asignatura));
+  const deHoy = dias.find((d) => d.fecha === db.hoy());
+  const que = deHoy?.repasoGeneral ? "repaso general" : deHoy?.temas.map((t) => t.doc.nombre).join(", ");
+  return `<a class="plan-hoy" href="#/plan/${plan.id}">📅 <b>${esc(plan.nombre)}</b> de ${esc(plan.asignatura.split("|")[1])}: ${textoDias(diasHasta(plan.fecha))}
+    ${que ? `<br><span class="sub">Hoy toca: ${esc(que)}</span>` : ""}</a>`;
+}
+
+// ---------- Pantalla: copia de seguridad y compartir ----------
+async function compartirArchivo(nombre, contenido, tipo) {
+  const archivo = new File([contenido], nombre, { type: tipo });
+  if (navigator.canShare?.({ files: [archivo] })) {
+    try {
+      await navigator.share({ files: [archivo], title: nombre });
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(archivo);
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  aviso(`Guardado en Descargas: ${nombre} (${Math.ceil(contenido.length / 1024)} KB)`);
+}
+
+async function vistaCopia() {
+  const { opciones } = await opcionesDeAmbito();
+  const docs = await db.listarDocumentos();
+  poner(
+    "Copia y compartir",
+    `<section class="panel">
+       <p class="grande">💾 Copia de seguridad</p>
+       <p>Guarda <b>todo</b> (materiales, resúmenes, cuestionarios y tu progreso) en un solo archivo. Sirve para no perder nada o para pasarlo a otro teléfono.</p>
+       <button class="btn ancho" data-accion="copia-completa" ${docs.length ? "" : "disabled"}>💾 Guardar copia completa</button>
+     </section>
+     <section class="panel">
+       <p class="grande">📲 Compartir con un compañero</p>
+       <p>Crea un archivo con los materiales, resúmenes y cuestionarios (sin tu progreso). Pásalo por <b>Zapya, Bluetooth o WhatsApp</b>: no gasta datos si usas Zapya o Bluetooth. Tu compañero lo carga en su Finlay con 📥.</p>
+       <select id="ambito-compartir">${opciones.replace('<option value="todo">Toda la carrera</option>', "")}</select>
+       <button class="btn ancho" data-accion="compartir" ${docs.length ? "" : "disabled"}>📤 Compartir</button>
+       <p class="nota">Solo se comparten las asignaturas que tienen cuestionarios.</p>
+     </section>
+     <section class="panel">
+       <p class="grande">📥 Cargar una copia o un paquete</p>
+       <button class="btn ancho" data-accion="paquete">📥 Elegir archivo</button>
+     </section>`,
+    "#/"
+  );
+}
+
+async function exportarPaquete(ambito, conProgreso) {
+  mostrarProgreso("Preparando el archivo…");
+  try {
+    const docs = await documentosDelAmbito(ambito);
+    const fragmentosPorDoc = new Map();
+    for (const d of docs) fragmentosPorDoc.set(d.id, await db.fragmentosDe(d.id));
+    const paquete = crearPaquete({
+      titulo: conProgreso ? "Copia de seguridad de Finlay" : `Finlay: ${nombreAmbito(ambito)}`,
+      docs,
+      fragmentosPorDoc,
+      respuestas: conProgreso ? await db.todasLasRespuestas() : null,
+      diario: conProgreso ? await db.listarDiario() : null,
+    });
+    const nombre = conProgreso
+      ? `finlay-copia-${db.hoy()}.json`
+      : `finlay-${normalizar(nombreAmbito(ambito)).trim().replace(/\s+/g, "-")}.json`;
+    mostrarProgreso(null);
+    await compartirArchivo(nombre, JSON.stringify(paquete), "application/json");
+  } catch (e) {
+    mostrarProgreso(null);
+    alert("No se pudo crear el archivo: " + e.message);
+  }
 }
 
 // ---------- Pestaña: progreso de una asignatura ----------
@@ -473,7 +853,15 @@ function vistaAyuda() {
       <li><b>Busca</b> en una asignatura, en un año o en toda la carrera. Cada resultado dice de qué libro o conferencia sale y en qué página.</li>
       <li>Pulsa <b>🔊</b> para escuchar. Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</li>
       <li><b>📤 Exportar texto</b> crea un archivo pequeño con el texto de una conferencia para enviárselo a Claude y que te haga el resumen y el cuestionario.</li>
+      <li><b>📥 Cargar paquete de Claude</b> añade las conferencias con su resumen y su cuestionario.</li>
+      <li><b>🧠 Repaso del día</b>: preguntas elegidas para hoy. Las que fallas vuelven mañana; las que aciertas, cada vez más tarde (repaso espaciado).</li>
+      <li><b>📝 Examen</b>: preguntas al azar con cronómetro y nota de 2 a 5.</li>
+      <li><b>📅 Plan</b>: pon la fecha de tu examen y Finlay reparte los temas por día, empezando por los más flojos.</li>
+      <li><b>🎧 Escuchar todos los resúmenes</b> (dentro de cada asignatura): como un programa de radio.</li>
+      <li><b>💾 Copia</b>: guarda todo para no perderlo, o comparte con tus compañeros por Zapya, Bluetooth o WhatsApp.</li>
     </ol>
+    <p class="nota">Meta diaria de preguntas:
+      <select id="meta">${[5, 10, 15, 20, 30, 50].map((v) => `<option value="${v}" ${v === metaDiaria() ? "selected" : ""}>${v}</option>`).join("")}</select></p>
     <p class="nota">Velocidad de la voz:
       <select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => `<option value="${v}" ${v === velocidadVoz() ? "selected" : ""}>${v}×</option>`).join("")}</select></p>
     <p class="nota">⚠️ Si borras los datos del navegador, se borran los materiales cargados en Finlay (tus archivos originales no se tocan).</p>`,
@@ -567,22 +955,8 @@ async function exportarTexto(docId) {
     texto += f.texto + "\n";
   }
   const nombre = doc.nombre.replace(/\.[^.]+$/, "") + ".txt";
-  const archivo = new File([texto], nombre, { type: "text/plain" });
   // En Android se puede compartir directo a la app de Claude, WhatsApp, etc.
-  if (navigator.canShare?.({ files: [archivo] })) {
-    try {
-      await navigator.share({ files: [archivo], title: nombre });
-      return;
-    } catch (e) {
-      if (e.name === "AbortError") return;
-    }
-  }
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(archivo);
-  a.download = nombre;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  aviso(`Guardado en Descargas: ${nombre} (${Math.ceil(texto.length / 1024)} KB)`);
+  await compartirArchivo(nombre, texto, "text/plain");
 }
 
 // ---------- Eventos ----------
@@ -592,6 +966,11 @@ document.addEventListener("submit", async (ev) => {
   if (f.classList.contains("buscador")) {
     const q = f.q.value.trim();
     if (q) location.hash = `#/buscar/${encodeURIComponent(f.dataset.ambito)}?q=${encodeURIComponent(q)}`;
+  } else if (f.classList.contains("form-examen")) {
+    location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}`;
+  } else if (f.classList.contains("form-plan")) {
+    const id = await db.guardarPlan({ asignatura: f.asignatura.value, nombre: f.nombre.value.trim(), fecha: f.fecha.value });
+    location.hash = `#/plan/${id}`;
   } else if (f.classList.contains("nueva-asig")) {
     const nombre = f.nombre.value.trim().replace(/\|/g, "-");
     if (!nombre) return;
@@ -650,10 +1029,29 @@ document.addEventListener("click", async (ev) => {
     const d = vistaDoc.doc;
     voz.leer(`Resumen de ${d.nombre}. ` + d.resumen.map((s) => `${s.titulo || ""}. ${s.texto}`).join(" "), velocidadVoz());
   } else if (accion === "leer-explicacion") {
-    const p = vistaDoc.doc.cuestionario[Number(b.dataset.i)];
+    const { doc: d, i: idx } = enPantalla[Number(b.dataset.i)];
+    const p = d.cuestionario[idx];
     const enunciado = p.tipo === "completar" ? p.pregunta.replace(/_{3,}/g, ", espacio en blanco, ") : p.pregunta;
     const extra = p.tipo === "vf" && p.afirmaciones ? p.afirmaciones.map((a) => a.texto).join(". ") + ". " : "";
     voz.leer(`${enunciado}. ${extra}${textoRespuesta(p)} ${p.explicacion || ""}`, velocidadVoz());
+  } else if (accion === "entregar") {
+    const sinResponder = enPantalla.filter((_, k) => !respondidaEnExamen(k)).length;
+    if (!sinResponder || confirm(`Te quedan ${sinResponder} preguntas sin responder. ¿Entregar de todas formas?`)) entregarExamen();
+  } else if (accion === "borrar-plan") {
+    if (confirm("¿Borrar este plan de examen?")) {
+      await db.borrarPlan(Number(id));
+      router();
+    }
+  } else if (accion === "copia-completa") {
+    exportarPaquete("todo", true);
+  } else if (accion === "compartir") {
+    exportarPaquete(document.getElementById("ambito-compartir").value, false);
+  } else if (accion === "escuchar-asig") {
+    const docs = (await db.documentosDeAsignatura(asig))
+      .filter((d) => d.resumen?.length)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
+    voz.leer(docs.map((d) => `${d.nombre}. ` + d.resumen.map((s) => `${s.titulo || ""}. ${s.texto}`).join(" ")).join(" . Siguiente tema. "), velocidadVoz());
+    aviso("🎧 Escuchando los resúmenes. Mantén la pantalla encendida.");
   } else if (accion === "reiniciar") {
     if (confirm("¿Borrar tus respuestas de este cuestionario y empezar de cero?")) {
       await db.borrarRespuestas(vistaDoc.doc.id);
@@ -688,7 +1086,13 @@ $paquete.addEventListener("change", async () => {
   }
 });
 
+document.addEventListener("input", () => modo === "examen" && contarExamen());
 document.addEventListener("change", (ev) => {
+  if (modo === "examen") contarExamen();
+  if (ev.target.id === "meta") {
+    guardarMeta(Number(ev.target.value));
+    aviso("Meta diaria guardada");
+  }
   if (ev.target.id === "velocidad") {
     try {
       localStorage.setItem("finlay.velocidad", ev.target.value);
@@ -734,6 +1138,9 @@ function mostrarBotonInstalar() {
 // ---------- Navegación ----------
 async function router() {
   voz.detener();
+  clearInterval(relojExamen);
+  $app.classList.remove("modo-examen");
+  modo = "normal";
   const [ruta, consulta = ""] = location.hash.slice(1).split("?");
   const partes = ruta.split("/").filter(Boolean).map(decodeURIComponent);
   const q = new URLSearchParams(consulta).get("q") || "";
@@ -748,6 +1155,15 @@ async function router() {
       await vistaDoc(partes[1], partes[2]);
     }
     else if (partes[0] === "biblioteca") await vistaBiblioteca();
+    else if (partes[0] === "repaso") await vistaRepaso();
+    else if (partes[0] === "examen") await vistaExamenInicio(partes[1]);
+    else if (partes[0] === "examen-hacer") {
+      const ps = new URLSearchParams(consulta);
+      await vistaExamen(partes[1], Number(ps.get("n")) || 20, ps.get("reloj") === "1");
+    }
+    else if (partes[0] === "planes") await vistaPlanes();
+    else if (partes[0] === "plan") await vistaPlan(Number(partes[1]));
+    else if (partes[0] === "copia") await vistaCopia();
     else if (partes[0] === "ayuda") vistaAyuda();
     else await vistaInicio();
   } catch (e) {

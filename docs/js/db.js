@@ -1,7 +1,7 @@
 // Base de datos local de Finlay (IndexedDB): todo se guarda en el teléfono.
 
 const NOMBRE_DB = "finlay";
-const VERSION_DB = 2;
+const VERSION_DB = 3;
 let dbPromesa = null;
 
 function abrir() {
@@ -25,6 +25,14 @@ function abrir() {
         // Respuestas de los cuestionarios (para el progreso). id = "docId|númeroDePregunta"
         const resp = db.createObjectStore("respuestas", { keyPath: "id" });
         resp.createIndex("docId", "docId");
+      }
+      if (ev.oldVersion < 3) {
+        // Actividad de cada día (para la racha y la meta diaria). id = "2026-11-03"
+        db.createObjectStore("diario", { keyPath: "fecha" });
+        // Fechas de examen (para el plan de estudio)
+        db.createObjectStore("planes", { keyPath: "id", autoIncrement: true });
+        // Notas de los exámenes de práctica
+        db.createObjectStore("examenes", { keyPath: "id", autoIncrement: true });
       }
     };
     pet.onsuccess = () => resolver(pet.result);
@@ -144,15 +152,94 @@ export async function borrarDocumento(docId) {
 }
 
 // ---------- Respuestas de cuestionarios (progreso) ----------
-/** Guarda si la pregunta se respondió bien. Se conserva el historial de aciertos. */
+// Repaso espaciado (sistema de cajas de Leitner): cada acierto sube la pregunta de caja
+// y la aleja en el tiempo; cada fallo la devuelve a la caja 1 (se repasa mañana).
+const DIAS_POR_CAJA = [0, 1, 2, 4, 8, 16];
+
+export function hoy(fecha = new Date()) {
+  const d = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000);
+  return d.toISOString().slice(0, 10);
+}
+
+function sumarDias(dias) {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return hoy(d);
+}
+
+/** Guarda si la pregunta se respondió bien, programa su próximo repaso y suma a la actividad del día. */
 export async function guardarRespuesta(docId, indice, correcta) {
-  const alm = await almacen("respuestas", "readwrite");
+  const db = await abrir();
+  const tx = db.transaction(["respuestas", "diario"], "readwrite");
+  const alm = tx.objectStore("respuestas");
   const id = `${docId}|${indice}`;
-  const previa = (await promesa(alm.get(id))) || { id, docId, indice, aciertos: 0, fallos: 0 };
-  previa.ultima = correcta;
-  previa.fecha = Date.now();
-  correcta ? previa.aciertos++ : previa.fallos++;
-  await promesa(alm.put(previa));
+  alm.get(id).onsuccess = (ev) => {
+    const r = ev.target.result || { id, docId, indice, aciertos: 0, fallos: 0, caja: 0 };
+    r.ultima = correcta;
+    r.fecha = Date.now();
+    correcta ? r.aciertos++ : r.fallos++;
+    r.caja = correcta ? Math.min((r.caja || 0) + 1, 5) : 1;
+    r.proxima = sumarDias(DIAS_POR_CAJA[r.caja]);
+    alm.put(r);
+  };
+  const diario = tx.objectStore("diario");
+  const fecha = hoy();
+  diario.get(fecha).onsuccess = (ev) => {
+    const d = ev.target.result || { fecha, preguntas: 0, correctas: 0 };
+    d.preguntas++;
+    if (correcta) d.correctas++;
+    diario.put(d);
+  };
+  await finTransaccion(tx);
+}
+
+export async function todasLasRespuestas() {
+  return promesa((await almacen("respuestas")).getAll());
+}
+
+export async function restaurarRespuestas(lista) {
+  const db = await abrir();
+  const tx = db.transaction("respuestas", "readwrite");
+  lista.forEach((r) => tx.objectStore("respuestas").put(r));
+  await finTransaccion(tx);
+}
+
+// ---------- Actividad diaria, planes y exámenes ----------
+export async function listarDiario() {
+  return promesa((await almacen("diario")).getAll());
+}
+
+export async function restaurarDiario(lista) {
+  const db = await abrir();
+  const tx = db.transaction("diario", "readwrite");
+  const alm = tx.objectStore("diario");
+  for (const d of lista) {
+    alm.get(d.fecha).onsuccess = (ev) => {
+      const actual = ev.target.result;
+      if (!actual || actual.preguntas < d.preguntas) alm.put(d);
+    };
+  }
+  await finTransaccion(tx);
+}
+
+export async function listarPlanes() {
+  return promesa((await almacen("planes")).getAll());
+}
+
+export async function guardarPlan(plan) {
+  return promesa((await almacen("planes", "readwrite")).put(plan));
+}
+
+export async function borrarPlan(id) {
+  return promesa((await almacen("planes", "readwrite")).delete(id));
+}
+
+export async function guardarExamen(examen) {
+  return promesa((await almacen("examenes", "readwrite")).add(examen));
+}
+
+export async function listarExamenes() {
+  return promesa((await almacen("examenes")).getAll());
 }
 
 export async function respuestasDe(docId) {
