@@ -841,6 +841,11 @@ async function planDeHoy() {
 
 // ---------- Pantalla: copia de seguridad y compartir ----------
 async function compartirArchivo(nombre, contenido, tipo) {
+  // En el APK de Android: el teléfono pregunta si guardar o enviar (Zapya, WhatsApp, Claude…)
+  if (window.FinlayAndroid) {
+    window.FinlayAndroid.guardar(nombre, contenido, tipo);
+    return;
+  }
   const archivo = new File([contenido], nombre, { type: tipo });
   if (navigator.canShare?.({ files: [archivo] })) {
     try {
@@ -1343,6 +1348,6 @@ async function router() {
 window.addEventListener("hashchange", router);
 router();
 
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && !window.FinlayAndroid) {
   navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("Sin modo sin conexión:", e));
 }

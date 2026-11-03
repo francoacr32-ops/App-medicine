@@ -1,11 +1,22 @@
 // Lectura en voz alta con la voz que ya trae el teléfono (gratis y sin internet).
 
 const sintesis = window.speechSynthesis;
+// En el APK de Android la voz la pone el teléfono a través del puente FinlayAndroid
+const android = window.FinlayAndroid || null;
 let alCambiar = () => {};
 let cola = [];
 let hablando = false;
 
-export const disponible = !!sintesis;
+export const disponible = !!sintesis || !!android;
+
+if (android) {
+  window.__finlayVozFin = () => {
+    if (hablando) {
+      hablando = false;
+      alCambiar(false);
+    }
+  };
+}
 
 export function onCambio(fn) {
   alCambiar = fn;
@@ -38,6 +49,14 @@ function trocear(texto) {
 }
 
 export function leer(texto, velocidad = 1) {
+  if (android) {
+    detener();
+    if (!android.vozDisponible()) return;
+    hablando = true;
+    alCambiar(true);
+    android.hablar(String(texto).replace(/\s+/g, " "), velocidad);
+    return;
+  }
   if (!sintesis) return;
   detener();
   const voz = vozEspanol();
@@ -66,6 +85,14 @@ export function leer(texto, velocidad = 1) {
 }
 
 export function detener() {
+  if (android) {
+    android.detener();
+    if (hablando) {
+      hablando = false;
+      alCambiar(false);
+    }
+    return;
+  }
   if (!sintesis) return;
   cola = [];
   sintesis.cancel();

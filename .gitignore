@@ -6,3 +6,6 @@ materiales/
 # Temporales
 __pycache__/
 .DS_Store
+# APK y llave de firma: no se publican (la llave permite firmar actualizaciones)
+*.apk
+*.keystore
