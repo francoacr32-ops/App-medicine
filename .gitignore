@@ -1,9 +1,8 @@
-# Tus libros y conferencias NUNCA se suben a GitHub (privacidad y derechos de autor)
+# Nunca subir materiales de estudio (privacidad y derechos de autor)
 materiales/
-# Archivos que generará Finlay (índice de textos, claves secretas)
-datos/
-.env
-# Archivos temporales de Python
+*.pdf
+*.docx
+*.pptx
+# Temporales
 __pycache__/
-*.pyc
-.venv/
+.DS_Store

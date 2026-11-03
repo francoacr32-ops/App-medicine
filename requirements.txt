@@ -1,2 +1,0 @@
-# Bibliotecas de Python que necesita Finlay
-pypdf
