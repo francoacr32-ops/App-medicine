@@ -187,7 +187,7 @@ async function vistaAnio(anio) {
     const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     return `<a class="tarjeta fila" href="${enlaceAsig(a.id)}">
       <span class="grande">${esc(a.nombre)}</span>
-      <span class="sub">${c} conferencias · ${l} libros${preguntas ? ` · ${preguntas} preguntas` : ""}</span></a>`;
+      <span class="sub">${c} conferencias y talleres · ${l} libros${preguntas ? ` · ${preguntas} preguntas` : ""}</span></a>`;
   };
   let secciones = "";
   for (const [valor, titulo] of SEMESTRES) {
