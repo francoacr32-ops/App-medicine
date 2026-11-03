@@ -7,6 +7,7 @@ import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
 import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata } from "./cuestionario.js";
+import { localizar } from "./guia.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -381,9 +382,86 @@ function mostrarCorreccion(k, r, sinResponder = false) {
   caja.innerHTML = `<b>${titulo}</b> ${esc(textoRespuesta(p))}
     ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
     ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
-    <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>`;
+    <div class="acciones">
+      ${!r.correcta ? botonGuia(k) : ""}
+      <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>
+    </div>`;
   caja.hidden = false;
 }
+
+/** Botón que lleva a la parte del material donde está la respuesta. */
+function botonGuia(k) {
+  const { doc } = enPantalla[k];
+  if (!doc.paginas) return "";
+  return `<button class="btn mini btn-corrector" data-accion="guia" data-i="${k}">📖 Ver dónde está en ${doc.tipo === "libro" ? "el libro" : "la conferencia"}</button>`;
+}
+
+// ---------- Visor de corrección (se abre encima, sin perder la pregunta) ----------
+const $visor = document.getElementById("visor");
+let visorEstado = null;
+
+function htmlConCorrector(texto, rango) {
+  if (!rango) return esc(texto).replace(/\n/g, "<br>");
+  const [a, b] = rango;
+  return (esc(texto.slice(0, a)) + `<mark class="corrector" id="corrector">${esc(texto.slice(a, b))}</mark>` + esc(texto.slice(b)))
+    .replace(/\n/g, "<br>");
+}
+
+async function abrirVisor(k) {
+  const { doc, i } = enPantalla[k];
+  const p = doc.cuestionario[i];
+  mostrarProgreso("Buscando la respuesta en el material…");
+  const lugar = await localizar(doc, p);
+  mostrarProgreso(null);
+  if (!lugar) return aviso("Este material no tiene el texto completo para mostrarte la parte.");
+  const paginas = [...new Set((await db.fragmentosDe(doc.id)).map((f) => f.pagina))];
+  visorEstado = { doc, p, paginas, lugar, actual: lugar.pagina };
+  if ($visor.hidden) history.pushState({ visor: true }, "");
+  $visor.hidden = false;
+  document.body.classList.add("sin-scroll");
+  await pintarVisor();
+}
+
+async function pintarVisor() {
+  const { doc, p, paginas, lugar, actual } = visorEstado;
+  const esLaMarcada = actual === lugar.pagina;
+  const texto = esLaMarcada ? lugar.texto : await db.textoDePagina(doc.id, actual);
+  const idx = paginas.indexOf(actual);
+  const nav = `<div class="paginador">
+      ${idx > 0 ? `<button class="btn mini" data-accion="visor-pag" data-p="${paginas[idx - 1]}">◀ Anterior</button>` : "<span></span>"}
+      <span>${esc(doc.etiqueta)} ${actual}</span>
+      ${idx < paginas.length - 1 ? `<button class="btn mini" data-accion="visor-pag" data-p="${paginas[idx + 1]}">Siguiente ▶</button>` : "<span></span>"}
+    </div>`;
+  document.getElementById("visor-cuerpo").innerHTML = `
+    <div class="respuesta-correcta"><b>✏️ Respuesta correcta:</b> ${esc(textoRespuesta(p).replace(/^(La respuesta correcta es|Las correctas son:|Respuestas?:)\s*/, ""))}</div>
+    <p class="cita">${cita(doc, doc.etiqueta, actual)}</p>
+    ${esLaMarcada
+      ? lugar.rango
+        ? `<p class="nota">La parte <mark class="corrector">marcada en verde</mark> es donde está la respuesta.</p>
+           <button class="btn mini" data-accion="visor-leer">🔊 Escuchar la parte marcada</button>`
+        : `<p class="nota">No pude ubicar la frase exacta: revisa esta página.</p>`
+      : `<button class="btn mini" data-accion="visor-pag" data-p="${lugar.pagina}">✏️ Volver a la parte marcada (${esc(doc.etiqueta)} ${lugar.pagina})</button>`}
+    ${nav}
+    <div class="pagina">${htmlConCorrector(texto, esLaMarcada ? lugar.rango : null)}</div>
+    ${nav}`;
+  const marca = document.getElementById("corrector");
+  const caja = $visor.querySelector(".visor-caja");
+  if (marca) marca.scrollIntoView({ block: "center" });
+  else caja.scrollTop = 0;
+}
+
+function cerrarVisor(desdeHistorial = false) {
+  if ($visor.hidden) return;
+  voz.detener();
+  $visor.hidden = true;
+  document.body.classList.remove("sin-scroll");
+  visorEstado = null;
+  if (!desdeHistorial && history.state?.visor) history.back();
+}
+
+// El botón "atrás" del teléfono cierra el visor en vez de salir de la pantalla
+window.addEventListener("popstate", () => cerrarVisor(true));
+document.addEventListener("keydown", (e) => e.key === "Escape" && cerrarVisor());
 
 async function responder(k, valor) {
   const { doc, i } = enPantalla[k];
@@ -399,6 +477,7 @@ async function responder(k, valor) {
   const r = corregir(p, tarjeta, valor);
   if (!r) return aviso("Responde todas las partes antes de comprobar.");
   if (p.tipo !== "abierta") mostrarCorreccion(k, r);
+  else if (!r.correcta) tarjeta.querySelector(".explicacion .acciones")?.insertAdjacentHTML("afterbegin", botonGuia(k));
   await db.guardarRespuesta(doc.id, i, r.correcta);
   alResponder(k, r);
 }
@@ -1034,6 +1113,16 @@ document.addEventListener("click", async (ev) => {
     const enunciado = p.tipo === "completar" ? p.pregunta.replace(/_{3,}/g, ", espacio en blanco, ") : p.pregunta;
     const extra = p.tipo === "vf" && p.afirmaciones ? p.afirmaciones.map((a) => a.texto).join(". ") + ". " : "";
     voz.leer(`${enunciado}. ${extra}${textoRespuesta(p)} ${p.explicacion || ""}`, velocidadVoz());
+  } else if (accion === "guia") {
+    abrirVisor(Number(b.dataset.i));
+  } else if (accion === "cerrar-visor") {
+    cerrarVisor();
+  } else if (accion === "visor-pag") {
+    visorEstado.actual = Number(b.dataset.p);
+    pintarVisor();
+  } else if (accion === "visor-leer") {
+    const { lugar } = visorEstado;
+    voz.leer(lugar.texto.slice(lugar.rango[0], lugar.rango[1]), velocidadVoz());
   } else if (accion === "entregar") {
     const sinResponder = enPantalla.filter((_, k) => !respondidaEnExamen(k)).length;
     if (!sinResponder || confirm(`Te quedan ${sinResponder} preguntas sin responder. ¿Entregar de todas formas?`)) entregarExamen();
@@ -1137,6 +1226,7 @@ function mostrarBotonInstalar() {
 
 // ---------- Navegación ----------
 async function router() {
+  if (!$visor.hidden) cerrarVisor(true);
   voz.detener();
   clearInterval(relojExamen);
   $app.classList.remove("modo-examen");

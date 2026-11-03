@@ -21,6 +21,16 @@
   <input id="archivo" type="file" multiple hidden>
   <input id="paquete" type="file" hidden>
   <div id="progreso" class="progreso" hidden><div><span class="rueda"></span><p></p></div></div>
+  <div id="visor" class="visor" role="dialog" aria-label="Dónde está la respuesta" hidden>
+    <div class="visor-caja">
+      <header class="visor-barra">
+        <span>📖 Dónde está la respuesta</span>
+        <button class="atras" data-accion="cerrar-visor" aria-label="Cerrar">✕</button>
+      </header>
+      <div id="visor-cuerpo"></div>
+      <button class="btn ancho" data-accion="cerrar-visor">Volver a la pregunta</button>
+    </div>
+  </div>
   <div id="aviso" class="aviso" role="status" hidden></div>
   <button id="detener-voz" class="detener-voz" hidden>⏹ Detener voz</button>
 

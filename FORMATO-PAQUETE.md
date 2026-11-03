@@ -67,9 +67,11 @@ material de estudio): se entregan por el chat.
 | `multiple` | Selección única | `opciones`, `correcta` (índice desde 0) |
 | `abierta` | Pregunta y respuesta | `respuesta` (el estudiante se autoevalúa) |
 
+Todas las preguntas aceptan además `cita`: la frase **literal** del material donde está la respuesta. Cuando el estudiante falla, Finlay abre esa página y resalta la cita en verde (corrector). Sin `cita`, Finlay la busca por palabras clave en la página indicada en `fuente`.
+
 ## Reglas para Claude al preparar resúmenes y cuestionarios
 
 1. Usar **solo** la información del material recibido. Nada de conocimiento externo.
-2. Cada sección del resumen y cada pregunta lleva su `fuente` (página o diapositiva).
+2. Cada sección del resumen y cada pregunta lleva su `fuente` (página o diapositiva), y cada pregunta su `cita` literal copiada del material.
 3. Cuestionario recomendado por conferencia: 2–3 V o F (de 4–6 afirmaciones), 2 de marque con X, 1–2 de enlace, 2–3 de complete, 2 de selección única y 2 de pregunta y respuesta. Desordenar la columna B y variar la posición de las respuestas correctas.
 4. Todo en español, con la terminología de la medicina cubana usada en el material.
