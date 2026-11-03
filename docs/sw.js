@@ -1,6 +1,6 @@
 // Permite abrir Finlay sin conexión y ahorra datos: los archivos se guardan en el teléfono.
 
-const VERSION = "finlay-v2";
+const VERSION = "finlay-v3";
 const BASICOS = [
   "./",
   "index.html",
@@ -14,6 +14,7 @@ const BASICOS = [
   "js/extraer.js",
   "js/voz.js",
   "js/paquete.js",
+  "js/cuestionario.js",
 ];
 
 self.addEventListener("install", (e) => {

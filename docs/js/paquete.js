@@ -4,21 +4,15 @@
 
 import * as db from "./db.js";
 import { fragmentarPagina, limpiar } from "./texto.js";
-
-const TIPOS_PREGUNTA = new Set(["multiple", "vf", "abierta"]);
+import { errorEnPregunta } from "./cuestionario.js";
 
 function sinExtension(nombre) {
   return nombre.replace(/\.(pdf|docx|pptx|txt)$/i, "").trim().toLowerCase();
 }
 
 function validarPregunta(p, i, nombre) {
-  const donde = `${nombre}, pregunta ${i + 1}`;
-  if (!p || !TIPOS_PREGUNTA.has(p.tipo)) throw new Error(`${donde}: tipo desconocido.`);
-  if (!p.pregunta) throw new Error(`${donde}: falta el texto de la pregunta.`);
-  if (p.tipo === "multiple" && (!Array.isArray(p.opciones) || p.opciones.length < 2 || !(p.correcta in p.opciones)))
-    throw new Error(`${donde}: opciones o respuesta correcta no válidas.`);
-  if (p.tipo === "vf" && typeof p.respuesta !== "boolean") throw new Error(`${donde}: la respuesta debe ser verdadero o falso.`);
-  if (p.tipo === "abierta" && !p.respuesta) throw new Error(`${donde}: falta la respuesta.`);
+  const error = errorEnPregunta(p);
+  if (error) throw new Error(`${nombre}, pregunta ${i + 1}: ${error}.`);
 }
 
 /** Lee y comprueba el archivo. Devuelve el paquete o lanza un error en español. */

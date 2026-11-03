@@ -186,3 +186,26 @@ button.chip { cursor: pointer; padding: 6px 12px; }
 .barra-progreso .dominado { background: #2e7d32; }
 .barra-progreso .en-camino { background: #f9a825; }
 .barra-progreso .repasar { background: var(--peligro); }
+
+/* Tipos de pregunta: V o F en lista, marque con X, enlace y complete */
+.fila-vf, .fila-enlace {
+  display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--borde); background: var(--fondo);
+}
+.vf-botones { display: flex; gap: 10px; white-space: nowrap; font-weight: 600; }
+.vf-botones label, .marca { cursor: pointer; }
+.marca { display: flex; gap: 8px; align-items: flex-start; }
+.marca input, .vf-botones input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--acento); }
+.enlace { display: grid; gap: 12px; }
+@media (min-width: 600px) { .enlace { grid-template-columns: 1fr 1fr; } }
+.enlace > div { display: flex; flex-direction: column; gap: 8px; }
+.fila-enlace select { padding: 6px 8px; min-width: 56px; }
+.item-b { margin: 0; padding: 8px 10px; border-radius: 10px; background: var(--fondo); border: 1px dashed var(--borde); }
+.hueco {
+  width: 9em; max-width: 100%; padding: 2px 6px; margin: 2px 0; border-radius: 6px;
+  border: 0; border-bottom: 2px solid var(--acento); font-weight: 600;
+}
+.fila-vf.bien, .fila-enlace.bien, .marca.bien, .hueco.bien { background: #d7f2dc; border-color: #2e7d32; color: #12391a; }
+.fila-vf.mal, .fila-enlace.mal, .marca.mal, .hueco.mal { background: #fbdcd9; border-color: var(--peligro); color: #4a0f0b; }
+.falto { font-size: .85rem; font-weight: 600; color: var(--peligro); }
+.bien .falto { color: #12391a; }

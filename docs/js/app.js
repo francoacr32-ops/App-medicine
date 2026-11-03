@@ -6,6 +6,7 @@ import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
+import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta } from "./cuestionario.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
 const $app = document.getElementById("app");
@@ -270,7 +271,6 @@ async function vistaLeer(docId, pagina, q) {
 }
 
 // ---------- Pantalla: un documento (resumen, cuestionario y texto completo) ----------
-const NOMBRE_TIPO = { multiple: "Selección múltiple", vf: "Verdadero o falso", abierta: "Pregunta y respuesta" };
 
 async function vistaDoc(docId, pestana) {
   const doc = await db.obtenerDocumento(docId);
@@ -330,25 +330,18 @@ async function htmlCuestionario(doc) {
   const preguntas = doc.cuestionario
     .map((p, i) => ({ p, i }))
     .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro));
-  const chips = [["todas", "Todas"], ["multiple", "Selección"], ["vf", "V o F"], ["abierta", "Preguntas"], ["falladas", "❗ Las que fallé"]]
+  // Solo se muestran los filtros de los tipos que hay en este cuestionario
+  const tipos = new Set(doc.cuestionario.map((p) => p.tipo));
+  const chips = [["todas", "Todas"], ...Object.entries(NOMBRE_TIPO).filter(([k]) => tipos.has(k)), ["falladas", "❗ Las que fallé"]]
     .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
     .join("");
   const tarjetas = preguntas
     .map(({ p, i }) => {
-      let opciones = "";
-      if (p.tipo === "multiple")
-        opciones = p.opciones
-          .map((o, j) => `<button class="opcion" data-accion="responder" data-i="${i}" data-r="${j}">${"ABCDEFG"[j]}) ${esc(o)}</button>`)
-          .join("");
-      else if (p.tipo === "vf")
-        opciones = `<button class="opcion" data-accion="responder" data-i="${i}" data-r="true">Verdadero</button>
-                    <button class="opcion" data-accion="responder" data-i="${i}" data-r="false">Falso</button>`;
-      else opciones = `<button class="btn mini" data-accion="ver-respuesta" data-i="${i}">👁 Ver respuesta</button>`;
       const previa = resp.get(i);
       return `<article class="pregunta" id="p${i}">
         <p class="sub">${i + 1}. ${NOMBRE_TIPO[p.tipo]}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
-        <p class="enunciado">${esc(p.pregunta)}</p>
-        <div class="opciones">${opciones}</div>
+        <p class="enunciado">${htmlEnunciado(p)}</p>
+        <div class="opciones">${htmlOpciones(p, i)}</div>
         <div class="explicacion" hidden></div>
       </article>`;
     })
@@ -365,36 +358,22 @@ async function responder(i, valor) {
   const doc = vistaDoc.doc;
   const p = doc.cuestionario[i];
   const tarjeta = document.getElementById("p" + i);
-  let correcta;
-  if (p.tipo === "multiple") correcta = Number(valor) === p.correcta;
-  else if (p.tipo === "vf") correcta = (valor === "true") === p.respuesta;
-  else correcta = valor === "si";
+  const r = corregir(p, tarjeta, valor);
+  if (!r) return aviso("Responde todas las partes antes de comprobar.");
 
-  tarjeta.querySelectorAll(".opcion").forEach((b) => {
-    b.disabled = true;
-    const r = b.dataset.r;
-    const esLaBuena = p.tipo === "multiple" ? Number(r) === p.correcta : (r === "true") === p.respuesta;
-    if (esLaBuena) b.classList.add("bien");
-    else if (r === String(valor)) b.classList.add("mal");
-  });
-  tarjeta.querySelectorAll("[data-accion=autoevaluar]").forEach((b) => (b.disabled = true));
-
-  const caja = tarjeta.querySelector(".explicacion");
-  const encabezado = p.tipo === "abierta" ? "" : `<b>${correcta ? "✅ ¡Correcto!" : "❌ Incorrecto."}</b> `;
-  const respuestaTexto =
-    p.tipo === "multiple" ? `La respuesta correcta es ${"ABCDEFG"[p.correcta]}) ${p.opciones[p.correcta]}.` :
-    p.tipo === "vf" ? `Es ${p.respuesta ? "verdadero" : "falso"}.` : "";
   if (p.tipo !== "abierta") {
-    caja.innerHTML = `${encabezado}${esc(respuestaTexto)}
+    const parcial = r.total > 1 ? ` (${r.aciertos} de ${r.total} bien)` : "";
+    const caja = tarjeta.querySelector(".explicacion");
+    caja.innerHTML = `<b>${r.correcta ? "✅ ¡Correcto!" : "❌ Incorrecto" + parcial + "."}</b> ${esc(textoRespuesta(p))}
       ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
       ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
       <button class="btn mini" data-accion="leer-explicacion" data-i="${i}">🔊 Escuchar</button>`;
     caja.hidden = false;
   }
-  await db.guardarRespuesta(doc.id, i, correcta);
+  await db.guardarRespuesta(doc.id, i, r.correcta);
   const resp = await db.respuestasDe(doc.id);
   document.getElementById("marcador").textContent =
-    `Respondidas ${resp.length} de ${doc.cuestionario.length} · Correctas ${resp.filter((r) => r.ultima).length}`;
+    `Respondidas ${resp.length} de ${doc.cuestionario.length} · Correctas ${resp.filter((x) => x.ultima).length}`;
 }
 
 function verRespuesta(i) {
@@ -663,7 +642,7 @@ document.addEventListener("click", async (ev) => {
   } else if (accion === "filtro") {
     vistaDoc.filtro = b.dataset.filtro;
     router();
-  } else if (accion === "responder" || accion === "autoevaluar") {
+  } else if (accion === "responder" || accion === "autoevaluar" || accion === "comprobar") {
     responder(Number(b.dataset.i), b.dataset.r);
   } else if (accion === "ver-respuesta") {
     verRespuesta(Number(b.dataset.i));
@@ -672,10 +651,9 @@ document.addEventListener("click", async (ev) => {
     voz.leer(`Resumen de ${d.nombre}. ` + d.resumen.map((s) => `${s.titulo || ""}. ${s.texto}`).join(" "), velocidadVoz());
   } else if (accion === "leer-explicacion") {
     const p = vistaDoc.doc.cuestionario[Number(b.dataset.i)];
-    const r =
-      p.tipo === "multiple" ? `La respuesta correcta es: ${p.opciones[p.correcta]}.` :
-      p.tipo === "vf" ? `Es ${p.respuesta ? "verdadero" : "falso"}.` : `Respuesta: ${p.respuesta}.`;
-    voz.leer(`${p.pregunta} ${r} ${p.explicacion || ""}`, velocidadVoz());
+    const enunciado = p.tipo === "completar" ? p.pregunta.replace(/_{3,}/g, ", espacio en blanco, ") : p.pregunta;
+    const extra = p.tipo === "vf" && p.afirmaciones ? p.afirmaciones.map((a) => a.texto).join(". ") + ". " : "";
+    voz.leer(`${enunciado}. ${extra}${textoRespuesta(p)} ${p.explicacion || ""}`, velocidadVoz());
   } else if (accion === "reiniciar") {
     if (confirm("¿Borrar tus respuestas de este cuestionario y empezar de cero?")) {
       await db.borrarRespuestas(vistaDoc.doc.id);

@@ -24,9 +24,18 @@ material de estudio): se entregan por el chat.
         { "titulo": "Estructura", "texto": "La membrana es una bicapa lipídica…", "fuente": "pág. 1" }
       ],
       "cuestionario": [
+        { "tipo": "vf", "pregunta": "Diga V o F:",
+          "afirmaciones": [ { "texto": "…", "respuesta": true }, { "texto": "…", "respuesta": false } ],
+          "explicacion": "…", "fuente": "pág. 1" },
+        { "tipo": "marcar", "pregunta": "Marque con una X las correctas:", "opciones": ["…", "…", "…", "…"],
+          "correctas": [0, 2], "explicacion": "…", "fuente": "pág. 2" },
+        { "tipo": "enlazar", "pregunta": "Enlace la columna A con la B:",
+          "columnaA": ["…", "…", "…"], "columnaB": ["…", "…", "…", "…"], "pares": [2, 0, 3],
+          "explicacion": "…", "fuente": "pág. 3" },
+        { "tipo": "completar", "pregunta": "La bomba expulsa ___ iones de ___.",
+          "respuestas": [["tres", "3"], "sodio"], "fuente": "pág. 2" },
         { "tipo": "multiple", "pregunta": "…", "opciones": ["…", "…", "…", "…"],
           "correcta": 0, "explicacion": "…", "fuente": "pág. 2" },
-        { "tipo": "vf", "pregunta": "…", "respuesta": true, "explicacion": "…", "fuente": "pág. 1" },
         { "tipo": "abierta", "pregunta": "…", "respuesta": "…", "fuente": "pág. 3" }
       ]
     }
@@ -45,11 +54,22 @@ material de estudio): se entregan por el chat.
 | `etiqueta` | no | `pág.`, `diap.` o `parte` |
 | `paginas` | no | Texto completo, página a página (para el buscador y la lectura) |
 | `resumen` | no | Secciones `{titulo, texto, fuente}` |
-| `cuestionario` | no | Preguntas `multiple` (`opciones`, `correcta` = índice desde 0), `vf` (`respuesta` true/false) o `abierta` (`respuesta` texto). Todas aceptan `explicacion` y `fuente` |
+| `cuestionario` | no | Lista de preguntas (ver tipos abajo). Todas aceptan `explicacion` y `fuente` |
+
+## Tipos de pregunta (estilo de los exámenes cubanos)
+
+| `tipo` | Nombre en la app | Campos |
+|---|---|---|
+| `vf` | Verdadero o falso | Lista: `afirmaciones` [{`texto`, `respuesta` true/false}]. Una sola: `respuesta` true/false |
+| `marcar` | Marque con una X | `opciones`, `correctas` (índices desde 0; puede haber varias) |
+| `enlazar` | Enlace | `columnaA`, `columnaB` (puede tener más elementos que A), `pares` (para cada elemento de A, el índice de B) |
+| `completar` | Complete | `pregunta` con `___` en cada espacio; `respuestas` (una por espacio; texto o lista de alternativas válidas) |
+| `multiple` | Selección única | `opciones`, `correcta` (índice desde 0) |
+| `abierta` | Pregunta y respuesta | `respuesta` (el estudiante se autoevalúa) |
 
 ## Reglas para Claude al preparar resúmenes y cuestionarios
 
 1. Usar **solo** la información del material recibido. Nada de conocimiento externo.
 2. Cada sección del resumen y cada pregunta lleva su `fuente` (página o diapositiva).
-3. Cuestionario recomendado por conferencia: ~6 de selección múltiple, ~4 de verdadero o falso y ~3 de pregunta y respuesta.
+3. Cuestionario recomendado por conferencia: 2–3 V o F (de 4–6 afirmaciones), 2 de marque con X, 1–2 de enlace, 2–3 de complete, 2 de selección única y 2 de pregunta y respuesta. Desordenar la columna B y variar la posición de las respuestas correctas.
 4. Todo en español, con la terminología de la medicina cubana usada en el material.
