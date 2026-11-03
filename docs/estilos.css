@@ -288,3 +288,11 @@ mark.corrector {
 }
 .visor-barra .atras { font-size: 1.4rem; padding: 0 4px; }
 body.sin-scroll { overflow: hidden; }
+
+/* Semestres */
+h2.semestre { color: var(--acento); border-bottom: 2px solid var(--borde); padding-bottom: 4px; margin-top: 22px; }
+h2.semestre .sub { font-weight: 400; }
+.nueva-asig { flex-wrap: wrap; }
+.nueva-asig input { flex: 1 1 100%; }
+.nueva-asig select { flex: 1; }
+.migas select { font-size: .85rem; padding: 4px 8px; }

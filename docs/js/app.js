@@ -131,24 +131,47 @@ async function vistaInicio() {
   mostrarBotonInstalar();
 }
 
-// ---------- Pantalla: un año ----------
+// ---------- Pantalla: un año (asignaturas separadas por semestre) ----------
+const SEMESTRES = [
+  [1, "1er semestre"],
+  [2, "2do semestre"],
+  [0, "Anual (todo el curso)"],
+  [null, "Sin semestre indicado"],
+];
+
+function selectorSemestre(nombre, valor, id = "") {
+  return `<select name="${nombre}" ${id ? `id="${id}"` : ""} aria-label="Semestre">
+    ${SEMESTRES.map(([v, t]) => `<option value="${v ?? ""}" ${(valor ?? null) === v ? "selected" : ""}>${t}</option>`).join("")}
+  </select>`;
+}
+
+const leerSemestre = (v) => (v === "" ? null : Number(v));
+
 async function vistaAnio(anio) {
   const asigs = await db.listarAsignaturas(anio);
-  const filas = await Promise.all(
-    asigs.map(async (a) => {
-      const docs = await db.documentosDeAsignatura(a.id);
-      const c = docs.filter((d) => d.tipo === "conferencia").length;
-      const l = docs.length - c;
-      return `<a class="tarjeta fila" href="${enlaceAsig(a.id)}">
-        <span class="grande">${esc(a.nombre)}</span>
-        <span class="sub">${c} conferencias · ${l} libros</span></a>`;
-    })
-  );
+  const tarjeta = async (a) => {
+    const docs = await db.documentosDeAsignatura(a.id);
+    const c = docs.filter((d) => d.tipo === "conferencia").length;
+    const l = docs.length - c;
+    const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
+    return `<a class="tarjeta fila" href="${enlaceAsig(a.id)}">
+      <span class="grande">${esc(a.nombre)}</span>
+      <span class="sub">${c} conferencias · ${l} libros${preguntas ? ` · ${preguntas} preguntas` : ""}</span></a>`;
+  };
+  let secciones = "";
+  for (const [valor, titulo] of SEMESTRES) {
+    const grupo = asigs.filter((a) => (a.semestre ?? null) === valor);
+    if (!grupo.length) continue;
+    secciones += `<h2 class="semestre">${titulo} <span class="sub">· ${grupo.length} asignatura${grupo.length > 1 ? "s" : ""}</span></h2>
+      ${(await Promise.all(grupo.map(tarjeta))).join("")}`;
+  }
   poner(
     ANIOS[anio - 1],
-    `${filas.join("") || `<p class="vacio">Todavía no hay asignaturas en ${ANIOS[anio - 1]}.</p>`}
+    `${secciones || `<p class="vacio">Todavía no hay asignaturas en ${ANIOS[anio - 1]}.</p>`}
+     <h2>Añadir asignatura</h2>
      <form class="nueva-asig" data-anio="${anio}">
-       <input name="nombre" placeholder="Nombre de la asignatura (ej. Morfofisiología)" required maxlength="80">
+       <input name="nombre" placeholder="Nombre (ej. Morfofisiología)" required maxlength="80">
+       ${selectorSemestre("semestre", 1)}
        <button class="btn">＋ Añadir</button>
      </form>
      ${asigs.length ? `<form class="buscador" data-ambito="anio:${anio}">
@@ -187,7 +210,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
 
   poner(
     asig.nombre,
-    `<p class="migas">${esc(ANIOS[asig.anio - 1])}</p>
+    `<p class="migas">${esc(ANIOS[asig.anio - 1])} · ${selectorSemestre("semestre", asig.semestre, "semestre-asig")}</p>
      <form class="buscador" data-ambito="${esc(id)}">
        <input name="q" type="search" placeholder="Buscar en ${esc(asig.nombre)}…" required>
        <button class="btn">Buscar</button>
@@ -835,7 +858,10 @@ async function exportarPaquete(ambito, conProgreso) {
     const docs = await documentosDelAmbito(ambito);
     const fragmentosPorDoc = new Map();
     for (const d of docs) fragmentosPorDoc.set(d.id, await db.fragmentosDe(d.id));
+    const asignaturas = (await db.listarAsignaturas()).filter((a) =>
+      ambito === "todo" || (ambito.startsWith("anio:") ? a.anio === Number(ambito.slice(5)) : a.id === ambito));
     const paquete = crearPaquete({
+      asignaturas,
       titulo: conProgreso ? "Copia de seguridad de Finlay" : `Finlay: ${nombreAmbito(ambito)}`,
       docs,
       fragmentosPorDoc,
@@ -1053,7 +1079,7 @@ document.addEventListener("submit", async (ev) => {
   } else if (f.classList.contains("nueva-asig")) {
     const nombre = f.nombre.value.trim().replace(/\|/g, "-");
     if (!nombre) return;
-    const asig = await db.crearAsignatura(Number(f.dataset.anio), nombre);
+    const asig = await db.crearAsignatura(Number(f.dataset.anio), nombre, leerSemestre(f.semestre.value));
     location.hash = enlaceAsig(asig.id);
   }
 });
@@ -1162,10 +1188,11 @@ $paquete.addEventListener("change", async () => {
     mostrarProgreso(null);
     alert(
       `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n\n` +
+      (r.asignaturas ? `• Asignaturas: ${r.asignaturas}\n` : "") +
       `• Materiales nuevos: ${r.nuevos}\n• Materiales actualizados: ${r.actualizados}\n` +
       `• Resúmenes: ${r.resumenes}\n• Preguntas: ${r.preguntas}`
     );
-    const anios = [...new Set(datos.materiales.map((m) => m.anio))];
+    const anios = [...new Set([...datos.materiales, ...(datos.asignaturas || [])].map((m) => Number(m.anio)))];
     location.hash = anios.length === 1 ? `#/anio/${anios[0]}` : "#/";
     router();
   } catch (e) {
@@ -1178,6 +1205,10 @@ $paquete.addEventListener("change", async () => {
 document.addEventListener("input", () => modo === "examen" && contarExamen());
 document.addEventListener("change", (ev) => {
   if (modo === "examen") contarExamen();
+  if (ev.target.id === "semestre-asig") {
+    const id = decodeURIComponent(location.hash.split("/")[2]);
+    db.cambiarSemestre(id, leerSemestre(ev.target.value)).then(() => aviso("Semestre guardado"));
+  }
   if (ev.target.id === "meta") {
     guardarMeta(Number(ev.target.value));
     aviso("Meta diaria guardada");

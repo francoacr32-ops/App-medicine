@@ -72,13 +72,26 @@ export async function obtenerAsignatura(id) {
   return promesa((await almacen("asignaturas")).get(id));
 }
 
-export async function crearAsignatura(anio, nombre) {
+/** semestre: 1 (primer semestre), 2 (segundo semestre), 0 (anual) o null (sin indicar). */
+export async function crearAsignatura(anio, nombre, semestre = null) {
   const id = `${anio}|${nombre}`;
   const existente = await obtenerAsignatura(id);
-  if (existente) return existente;
-  const asig = { id, anio, nombre };
+  if (existente) {
+    if (semestre !== null && semestre !== undefined && existente.semestre !== semestre) {
+      existente.semestre = semestre;
+      await promesa((await almacen("asignaturas", "readwrite")).put(existente));
+    }
+    return existente;
+  }
+  const asig = { id, anio, nombre, semestre: semestre ?? null };
   await promesa((await almacen("asignaturas", "readwrite")).put(asig));
   return asig;
+}
+
+export async function cambiarSemestre(id, semestre) {
+  const asig = await obtenerAsignatura(id);
+  asig.semestre = semestre;
+  await promesa((await almacen("asignaturas", "readwrite")).put(asig));
 }
 
 export async function borrarAsignatura(id) {

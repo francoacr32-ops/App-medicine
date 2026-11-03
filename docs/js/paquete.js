@@ -23,8 +23,12 @@ export async function leerPaquete(archivo) {
   } catch {
     throw new Error("El archivo no es un paquete de Finlay válido (no se pudo leer).");
   }
-  if (datos?.formato !== "finlay-paquete" || !Array.isArray(datos.materiales))
-    throw new Error("Este archivo no es un paquete de Finlay.");
+  if (datos?.formato !== "finlay-paquete") throw new Error("Este archivo no es un paquete de Finlay.");
+  datos.materiales ||= [];
+  if (!Array.isArray(datos.materiales)) throw new Error("Este archivo no es un paquete de Finlay.");
+  for (const a of datos.asignaturas || []) {
+    if (!(a.anio >= 1 && a.anio <= 6) || !a.nombre) throw new Error("Hay una asignatura sin año o sin nombre.");
+  }
   for (const m of datos.materiales) {
     if (!(m.anio >= 1 && m.anio <= 6) || !m.asignatura || !m.nombre)
       throw new Error("Hay un material sin año, asignatura o nombre.");
@@ -40,9 +44,16 @@ export async function importarPaquete(datos, progreso = () => {}) {
   const respuestasPrevias = new Map((await db.todasLasRespuestas()).map((r) => [r.id, r]));
   const respuestasNuevas = [];
 
+  // Lista de asignaturas del plan de estudio (con su semestre), aunque todavía no tengan materiales
+  const semestre = (s) => (s === 1 || s === 2 || s === 0 ? s : null);
+  for (const a of datos.asignaturas || []) {
+    await db.crearAsignatura(Number(a.anio), String(a.nombre).trim().replace(/\|/g, "-"), semestre(a.semestre));
+    resultado.asignaturas = (resultado.asignaturas || 0) + 1;
+  }
+
   for (const [i, m] of datos.materiales.entries()) {
     progreso(`Guardando ${i + 1} de ${datos.materiales.length}:\n${m.nombre}`);
-    const asig = await db.crearAsignatura(Number(m.anio), String(m.asignatura).trim().replace(/\|/g, "-"));
+    const asig = await db.crearAsignatura(Number(m.anio), String(m.asignatura).trim().replace(/\|/g, "-"), semestre(m.semestre));
     const clave = sinExtension(m.nombre);
     const candidatos = todos.filter((d) => sinExtension(d.nombre) === clave);
     let doc = candidatos.find((d) => d.asignaturas.includes(asig.id)) || candidatos.find((d) => d.tipo === "libro");

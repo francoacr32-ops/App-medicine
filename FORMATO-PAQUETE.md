@@ -10,6 +10,10 @@ material de estudio): se entregan por el chat.
   "formato": "finlay-paquete",
   "version": 1,
   "titulo": "1er año — Morfofisiología",
+  "asignaturas": [
+    { "anio": 1, "semestre": 1, "nombre": "Morfofisiología" },
+    { "anio": 1, "semestre": 2, "nombre": "…" }
+  ],
   "materiales": [
     {
       "anio": 1,
@@ -47,8 +51,10 @@ material de estudio): se entregan por el chat.
 
 | Campo | Obligatorio | Descripción |
 |---|---|---|
+| `asignaturas` (arriba) | no | Lista del plan de estudio: `{anio, semestre, nombre}`. `semestre`: 1, 2, 0 (anual) o null. Se crean aunque aún no tengan materiales |
 | `anio` | sí | 1 a 6 |
 | `asignatura` | sí | Nombre de la asignatura (se crea si no existe) |
+| `semestre` | no | 1, 2 o 0 (anual), si la asignatura es nueva |
 | `nombre` | sí | Nombre de la conferencia o capítulo. Si ya existe en esa asignatura (mismo nombre, sin extensión), solo se le añaden resumen y cuestionario |
 | `tipo` | no | `conferencia` (por defecto) o `libro` |
 | `etiqueta` | no | `pág.`, `diap.` o `parte` |
