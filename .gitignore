@@ -1,0 +1,9 @@
+# Tus libros y conferencias NUNCA se suben a GitHub (privacidad y derechos de autor)
+materiales/
+# Archivos que generará Finlay (índice de textos, claves secretas)
+datos/
+.env
+# Archivos temporales de Python
+__pycache__/
+*.pyc
+.venv/
