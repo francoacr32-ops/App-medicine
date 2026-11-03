@@ -121,7 +121,7 @@ export function repartirPlan(fechaExamen, temas) {
  * Crea un paquete de Finlay con los materiales indicados (mismo formato que los de Claude),
  * para guardar una copia o pasárselo a un compañero.
  */
-export function crearPaquete({ titulo, docs, fragmentosPorDoc, respuestas = null, diario = null, asignaturas = [] }) {
+export function crearPaquete({ titulo, docs, fragmentosPorDoc, respuestas = null, diario = null, asignaturas = [], imagenes = {} }) {
   const materiales = docs.map((d) => {
     const [anio, ...resto] = d.asignaturas[0].split("|");
     const paginas = [];
@@ -156,6 +156,7 @@ export function crearPaquete({ titulo, docs, fragmentosPorDoc, respuestas = null
     asignaturas: asignaturas.map((a) => ({ anio: a.anio, nombre: a.nombre, semestre: a.semestre ?? null })),
     materiales,
   };
+  if (Object.keys(imagenes).length) paquete.imagenes = imagenes;
   if (diario) paquete.diario = diario;
   return paquete;
 }

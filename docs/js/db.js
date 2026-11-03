@@ -1,7 +1,7 @@
 // Base de datos local de Finlay (IndexedDB): todo se guarda en el teléfono.
 
 const NOMBRE_DB = "finlay";
-const VERSION_DB = 3;
+const VERSION_DB = 4;
 let dbPromesa = null;
 
 function abrir() {
@@ -33,6 +33,10 @@ function abrir() {
         db.createObjectStore("planes", { keyPath: "id", autoIncrement: true });
         // Notas de los exámenes de práctica
         db.createObjectStore("examenes", { keyPath: "id", autoIncrement: true });
+      }
+      if (ev.oldVersion < 4) {
+        // Imágenes de las preguntas y los resúmenes. id = huella del contenido (no se repiten)
+        db.createObjectStore("imagenes", { keyPath: "id" });
       }
     };
     pet.onsuccess = () => resolver(pet.result);
@@ -272,6 +276,26 @@ export async function borrarRespuestas(docId) {
     }
   };
   await finTransaccion(tx);
+}
+
+// ---------- Imágenes ----------
+const cacheImagenes = new Map();
+
+export async function guardarImagenes(lista) {
+  if (!lista.length) return;
+  const db = await abrir();
+  const tx = db.transaction("imagenes", "readwrite");
+  lista.forEach((img) => tx.objectStore("imagenes").put(img));
+  await finTransaccion(tx);
+}
+
+/** Devuelve la imagen como "data:image/...;base64,…" (o null si no existe). */
+export async function obtenerImagen(id) {
+  if (cacheImagenes.has(id)) return cacheImagenes.get(id);
+  const img = await promesa((await almacen("imagenes")).get(id));
+  const datos = img?.datos || null;
+  if (datos) cacheImagenes.set(id, datos);
+  return datos;
 }
 
 // ---------- Fragmentos ----------

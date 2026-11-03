@@ -56,10 +56,10 @@ material de estudio): se entregan por el chat.
 | `asignatura` | sí | Nombre de la asignatura (se crea si no existe) |
 | `semestre` | no | 1, 2 o 0 (anual), si la asignatura es nueva |
 | `nombre` | sí | Nombre de la conferencia o capítulo. Si ya existe en esa asignatura (mismo nombre, sin extensión), solo se le añaden resumen y cuestionario |
-| `tipo` | no | `conferencia` (por defecto) o `libro` |
+| `tipo` | no | `conferencia` (por defecto), `taller` (clase taller) o `libro` |
 | `etiqueta` | no | `pág.`, `diap.` o `parte` |
 | `paginas` | no | Texto completo, página a página (para el buscador y la lectura) |
-| `resumen` | no | Secciones `{titulo, texto, fuente}` |
+| `resumen` | no | Secciones `{titulo, texto, fuente}` y opcionalmente `imagen` + `pie` |
 | `cuestionario` | no | Lista de preguntas (ver tipos abajo). Todas aceptan `explicacion` y `fuente` |
 
 ## Tipos de pregunta (estilo de los exámenes cubanos)
@@ -75,9 +75,24 @@ material de estudio): se entregan por el chat.
 
 Todas las preguntas aceptan además `cita`: la frase **literal** del material donde está la respuesta. Cuando el estudiante falla, Finlay abre esa página y resalta la cita en verde (corrector). Sin `cita`, Finlay la busca por palabras clave en la página indicada en `fuente`.
 
+## Imágenes
+
+Arriba del paquete, `"imagenes": { "nombre": "data:image/jpeg;base64,…" }`. Las preguntas y las
+secciones del resumen las usan con `"imagen": "nombre"` y un `"pie"` opcional. Finlay guarda cada
+imagen una sola vez (aunque se importe varias veces) y la muestra con zoom al tocarla.
+
+Preparación (herramienta `herramientas/imagenes.py`):
+1. `extraer` las imágenes del .pptx/.pdf original (el texto exportado no las trae).
+2. Mirar cada imagen y elegir las útiles (esquemas, cortes, láminas).
+3. `preparar` cada una: máx. 900 px, JPEG ≈ 20–90 KB, con `--marcas` numeradas para preguntas
+   de "señale" o "enlace cada número con su nombre", y `--recorte` si sobra parte.
+4. `datauri` para pegarla en el paquete. Pocas imágenes por conferencia: los datos son caros.
+
 ## Reglas para Claude al preparar resúmenes y cuestionarios
 
 1. Usar **solo** la información del material recibido. Nada de conocimiento externo.
 2. Cada sección del resumen y cada pregunta lleva su `fuente` (página o diapositiva), y cada pregunta su `cita` literal copiada del material.
 3. Cuestionario recomendado por conferencia: 2–3 V o F (de 4–6 afirmaciones), 2 de marque con X, 1–2 de enlace, 2–3 de complete, 2 de selección única y 2 de pregunta y respuesta. Desordenar la columna B y variar la posición de las respuestas correctas.
 4. Todo en español, con la terminología de la medicina cubana usada en el material.
+5. Las clases taller (`tipo: "taller"`) se usan como fuente adicional de preguntas prácticas.
+6. Preguntas con imagen solo sobre lo que la imagen y el material muestran; marcar números con la herramienta.

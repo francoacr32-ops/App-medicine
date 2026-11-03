@@ -6,6 +6,40 @@ import * as db from "./db.js";
 import { fragmentarPagina, limpiar } from "./texto.js";
 import { errorEnPregunta } from "./cuestionario.js";
 
+/** Huella corta del contenido, para no guardar dos veces la misma imagen. */
+function huella(texto) {
+  let h1 = 0x811c9dc5, h2 = 0;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619);
+    h2 = (Math.imul(h2, 31) + c) | 0;
+  }
+  return "i" + (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36) + texto.length.toString(36);
+}
+
+const IMAGEN_VALIDA = /^data:image\/(jpeg|png|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/;
+
+/** Guarda las imágenes del paquete y cambia sus nombres por la huella en preguntas y resúmenes. */
+async function importarImagenes(datos) {
+  const nombres = new Map();
+  const guardar = [];
+  for (const [nombre, contenido] of Object.entries(datos.imagenes || {})) {
+    if (typeof contenido !== "string" || !IMAGEN_VALIDA.test(contenido)) continue;
+    const id = huella(contenido);
+    nombres.set(nombre, id);
+    guardar.push({ id, datos: contenido });
+  }
+  await db.guardarImagenes(guardar);
+  const cambiar = (obj) => {
+    if (obj?.imagen) obj.imagen = nombres.get(obj.imagen) || (String(obj.imagen).startsWith("i") ? obj.imagen : null);
+  };
+  for (const m of datos.materiales) {
+    (m.cuestionario || []).forEach(cambiar);
+    (m.resumen || []).forEach(cambiar);
+  }
+  return guardar.length;
+}
+
 function sinExtension(nombre) {
   return nombre.replace(/\.(pdf|docx|pptx|txt)$/i, "").trim().toLowerCase();
 }
@@ -43,6 +77,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
   const resultado = { nuevos: 0, actualizados: 0, resumenes: 0, preguntas: 0, progreso: false };
   const respuestasPrevias = new Map((await db.todasLasRespuestas()).map((r) => [r.id, r]));
   const respuestasNuevas = [];
+  resultado.imagenes = await importarImagenes(datos);
 
   // Lista de asignaturas del plan de estudio (con su semestre), aunque todavía no tengan materiales
   const semestre = (s) => (s === 1 || s === 2 || s === 0 ? s : null);
@@ -81,7 +116,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
         id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         nombre: m.nombre,
         tamano: 0,
-        tipo: m.tipo === "libro" ? "libro" : "conferencia",
+        tipo: ["libro", "taller"].includes(m.tipo) ? m.tipo : "conferencia",
         asignaturas: [asig.id],
         paginas: paginas.length,
         primera: paginas[0]?.n ?? 1,

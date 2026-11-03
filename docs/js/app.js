@@ -62,9 +62,11 @@ function resaltar(texto, patrones) {
   return html + esc(texto.slice(pos));
 }
 
+const ICONO = { libro: "📕", conferencia: "📝", taller: "🛠️" };
+const icono = (doc) => ICONO[doc.tipo] || "📝";
+
 function cita(doc, etiqueta, pagina) {
-  const icono = doc.tipo === "libro" ? "📕" : "📝";
-  return `${icono} <b>${esc(doc.nombre)}</b> — ${esc(etiqueta)} ${pagina}`;
+  return `${icono(doc)} <b>${esc(doc.nombre)}</b> — ${esc(etiqueta)} ${pagina}`;
 }
 
 function poner(titulo, html, atras = null) {
@@ -73,6 +75,35 @@ function poner(titulo, html, atras = null) {
   $atras.dataset.destino = atras || "";
   $app.innerHTML = html;
   window.scrollTo(0, 0);
+  cargarImagenes($app);
+}
+
+function htmlFigura(id, pie) {
+  if (!id) return "";
+  return `<figure class="figura"><img data-img="${esc(id)}" alt="${esc(pie || "Imagen")}" data-accion="ampliar">
+    ${pie ? `<figcaption>${esc(pie)}</figcaption>` : ""}<span class="sub">🔍 Toca la imagen para ampliarla</span></figure>`;
+}
+
+async function cargarImagenes(raiz) {
+  for (const img of raiz.querySelectorAll("img[data-img]:not([src])")) {
+    const datos = await db.obtenerImagen(img.dataset.img);
+    if (datos) img.src = datos;
+    else img.closest("figure")?.remove();
+  }
+}
+
+// Ver una imagen en grande (con zoom de dos dedos del navegador)
+const $lupa = document.getElementById("lupa");
+function ampliar(src) {
+  $lupa.querySelector("img").src = src;
+  $lupa.hidden = false;
+  history.pushState({ lupa: true }, "");
+}
+function cerrarLupa(desdeHistorial = false) {
+  if ($lupa.hidden) return false;
+  $lupa.hidden = true;
+  if (!desdeHistorial && history.state?.lupa) history.back();
+  return true;
 }
 
 // ---------- Pantalla: inicio ----------
@@ -151,7 +182,7 @@ async function vistaAnio(anio) {
   const asigs = await db.listarAsignaturas(anio);
   const tarjeta = async (a) => {
     const docs = await db.documentosDeAsignatura(a.id);
-    const c = docs.filter((d) => d.tipo === "conferencia").length;
+    const c = docs.filter((d) => d.tipo !== "libro").length;
     const l = docs.length - c;
     const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     return `<a class="tarjeta fila" href="${enlaceAsig(a.id)}">
@@ -188,12 +219,12 @@ async function vistaAsignatura(id, pestana = "conferencias") {
   const docs = (await db.documentosDeAsignatura(id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
   if (pestana === "progreso") return vistaProgreso(asig, docs);
   const tipo = pestana === "libros" ? "libro" : "conferencia";
-  const lista = docs.filter((d) => d.tipo === tipo);
+  const lista = docs.filter((d) => (tipo === "libro" ? d.tipo === "libro" : d.tipo !== "libro"));
 
   const items = lista
     .map(
       (d) => `<li class="doc">
-        <a href="#/doc/${d.id}" class="doc-nombre">${tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
+        <a href="#/doc/${d.id}" class="doc-nombre">${icono(d)} ${esc(d.nombre)}</a>
         <span class="sub">${d.paginas ? `${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}` : "sin texto completo"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
         ${d.resumen || d.cuestionario ? `<span class="etiquetas">${d.resumen ? '<span class="chip">📋 Resumen</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
         <span class="acciones">
@@ -352,6 +383,7 @@ async function vistaDoc(docId, pestana) {
             (s) => `<section class="seccion-resumen">
               ${s.titulo ? `<h3>${esc(s.titulo)}</h3>` : ""}
               <div>${esc(s.texto).replace(/\n/g, "<br>")}</div>
+              ${htmlFigura(s.imagen, s.pie)}
               ${s.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(s.fuente)}</p>` : ""}
             </section>`
           )
@@ -391,6 +423,7 @@ function htmlTarjeta(k, previa = null, conOrigen = false) {
   return `<article class="pregunta" id="p${k}">
     <p class="sub">${titulo}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
     <p class="enunciado">${htmlEnunciado(p)}</p>
+    ${htmlFigura(p.imagen, p.pie)}
     <div class="opciones">${htmlOpciones(p, k)}</div>
     <div class="explicacion" hidden></div>
   </article>`;
@@ -483,7 +516,7 @@ function cerrarVisor(desdeHistorial = false) {
 }
 
 // El botón "atrás" del teléfono cierra el visor en vez de salir de la pantalla
-window.addEventListener("popstate", () => cerrarVisor(true));
+window.addEventListener("popstate", () => cerrarLupa(true) || cerrarVisor(true));
 document.addEventListener("keydown", (e) => e.key === "Escape" && cerrarVisor());
 
 async function responder(k, valor) {
@@ -736,7 +769,7 @@ async function entregarExamen() {
 
 // ---------- Pantalla: plan para el examen ----------
 async function temasConEstado(asigId) {
-  const docs = (await db.documentosDeAsignatura(asigId)).filter((d) => d.tipo === "conferencia" || d.cuestionario?.length);
+  const docs = (await db.documentosDeAsignatura(asigId)).filter((d) => d.tipo !== "libro" || d.cuestionario?.length);
   const temas = await Promise.all(
     docs.map(async (doc) => (doc.cuestionario?.length ? { doc, ...(await estadoDe(doc)) } : { doc, estado: "sin-empezar", pct: 0 }))
   );
@@ -860,7 +893,15 @@ async function exportarPaquete(ambito, conProgreso) {
     for (const d of docs) fragmentosPorDoc.set(d.id, await db.fragmentosDe(d.id));
     const asignaturas = (await db.listarAsignaturas()).filter((a) =>
       ambito === "todo" || (ambito.startsWith("anio:") ? a.anio === Number(ambito.slice(5)) : a.id === ambito));
+    const imagenes = {};
+    for (const d of docs)
+      for (const x of [...(d.cuestionario || []), ...(d.resumen || [])])
+        if (x.imagen && !imagenes[x.imagen]) {
+          const datos = await db.obtenerImagen(x.imagen);
+          if (datos) imagenes[x.imagen] = datos;
+        }
     const paquete = crearPaquete({
+      imagenes,
       asignaturas,
       titulo: conProgreso ? "Copia de seguridad de Finlay" : `Finlay: ${nombreAmbito(ambito)}`,
       docs,
@@ -938,7 +979,7 @@ async function vistaBiblioteca() {
     docs.length
       ? `<ul class="docs">${docs
           .map(
-            (d) => `<li class="doc"><a class="doc-nombre" href="#/doc/${d.id}">${d.tipo === "libro" ? "📕" : "📝"} ${esc(d.nombre)}</a>
+            (d) => `<li class="doc"><a class="doc-nombre" href="#/doc/${d.id}">${icono(d)} ${esc(d.nombre)}</a>
             <span class="sub">${esc(d.asignaturas.map(nombreAsig).join(" · "))}</span></li>`
           )
           .join("")}</ul>`
@@ -1139,6 +1180,10 @@ document.addEventListener("click", async (ev) => {
     const enunciado = p.tipo === "completar" ? p.pregunta.replace(/_{3,}/g, ", espacio en blanco, ") : p.pregunta;
     const extra = p.tipo === "vf" && p.afirmaciones ? p.afirmaciones.map((a) => a.texto).join(". ") + ". " : "";
     voz.leer(`${enunciado}. ${extra}${textoRespuesta(p)} ${p.explicacion || ""}`, velocidadVoz());
+  } else if (accion === "ampliar") {
+    if (b.src) ampliar(b.src);
+  } else if (accion === "cerrar-lupa") {
+    cerrarLupa();
   } else if (accion === "guia") {
     abrirVisor(Number(b.dataset.i));
   } else if (accion === "cerrar-visor") {
@@ -1189,6 +1234,7 @@ $paquete.addEventListener("change", async () => {
     alert(
       `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n\n` +
       (r.asignaturas ? `• Asignaturas: ${r.asignaturas}\n` : "") +
+      (r.imagenes ? `• Imágenes: ${r.imagenes}\n` : "") +
       `• Materiales nuevos: ${r.nuevos}\n• Materiales actualizados: ${r.actualizados}\n` +
       `• Resúmenes: ${r.resumenes}\n• Preguntas: ${r.preguntas}`
     );
