@@ -1234,6 +1234,7 @@ $paquete.addEventListener("change", async () => {
     alert(
       `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n\n` +
       (r.asignaturas ? `• Asignaturas: ${r.asignaturas}\n` : "") +
+      (r.quitadas ? `• Asignaturas quitadas: ${r.quitadas.join(", ")}\n` : "") +
       (r.imagenes ? `• Imágenes: ${r.imagenes}\n` : "") +
       `• Materiales nuevos: ${r.nuevos}\n• Materiales actualizados: ${r.actualizados}\n` +
       `• Resúmenes: ${r.resumenes}\n• Preguntas: ${r.preguntas}`

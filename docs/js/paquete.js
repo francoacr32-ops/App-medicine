@@ -86,6 +86,15 @@ export async function importarPaquete(datos, progreso = () => {}) {
     resultado.asignaturas = (resultado.asignaturas || 0) + 1;
   }
 
+  // Asignaturas que el paquete pide quitar (con sus materiales y progreso)
+  for (const q of datos.quitarAsignaturas || []) {
+    const id = `${Number(q.anio)}|${String(q.nombre).trim()}`;
+    if (await db.obtenerAsignatura(id)) {
+      await db.borrarAsignatura(id);
+      (resultado.quitadas ||= []).push(q.nombre);
+    }
+  }
+
   for (const [i, m] of datos.materiales.entries()) {
     progreso(`Guardando ${i + 1} de ${datos.materiales.length}:\n${m.nombre}`);
     const asig = await db.crearAsignatura(Number(m.anio), String(m.asignatura).trim().replace(/\|/g, "-"), semestre(m.semestre));
