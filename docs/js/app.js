@@ -226,14 +226,21 @@ async function vistaInicio() {
 }
 
 // ---------- Pantalla: Temas (años, buscador y materiales) ----------
+// Ícono y color de cada año (como en el diseño)
+const ESTILO_ANIO = [["birrete", "#12b5c2"], ["libro", "#2f7ff0"], ["matraz", "#9b4fe0"],
+  ["estetoscopio", "#13bfa0"], ["microscopio", "#f2962e"], ["adn", "#e5408f"]];
 async function vistaTemas() {
   const asigs = await db.listarAsignaturas();
   const docs = await db.listarDocumentos();
   const tarjetas = ANIOS.map((nombre, i) => {
     const n = asigs.filter((a) => a.anio === i + 1).length;
-    return `<a class="tarjeta anio" href="#/anio/${i + 1}">
-      <span class="grande">${esc(nombre)}</span>
-      <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></a>`;
+    const [icono, color] = ESTILO_ANIO[i];
+    return `<a class="tarjeta anio${n ? " con-asig" : ""}" style="--c:${color}" href="#/anio/${i + 1}">
+      <span class="anio-ico">${ico(icono)}</span>
+      ${n ? `<span class="anio-check">${ico("check")}</span>` : ""}
+      <span class="anio-pie"><span><span class="grande">${esc(nombre)}</span>
+        <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></span>
+        <span class="anio-flecha">${ico("chevron")}</span></span></a>`;
   }).join("");
   poner("Temas", `
     <form class="buscador" data-ambito="todo">
@@ -319,7 +326,7 @@ async function vistaPerfil() {
   poner("Perfil", `
     <section class="tarjeta perfil-cabeza">
       <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.4.1</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.5</span><span class="sub">${docs.length} materiales${espacio}</span></div>
     </section>
     <h2>Tus datos</h2>
     <div class="tarjeta ajustes">
@@ -327,7 +334,7 @@ async function vistaPerfil() {
     </div>
     <h2>Ajustes</h2>
     <div class="tarjeta ajustes">
-      <label for="aj-tema">Apariencia<select id="aj-tema">${opcion("", "Igual que el teléfono", pref("tema"))}${opcion("claro", "Clara", pref("tema"))}${opcion("oscuro", "Oscura", pref("tema"))}</select></label>
+      <label for="aj-tema">Apariencia<select id="aj-tema">${opcion("hora", "Automática por la hora (clara de día, oscura de noche)", pref("tema", "hora"))}${opcion("claro", "Clara", pref("tema", "hora"))}${opcion("oscuro", "Oscura", pref("tema", "hora"))}${opcion("telefono", "Igual que el teléfono", pref("tema", "hora"))}</select></label>
       <label for="aj-escala">Tamaño de letra<select id="aj-escala">${opcion("1", "Normal", pref("escala", "1"))}${opcion("1.12", "Grande", pref("escala", "1"))}${opcion("1.25", "Muy grande", pref("escala", "1"))}</select></label>
       <label for="meta">Meta diaria de preguntas<select id="meta">${[5, 10, 15, 20, 30, 50, 60].map((v) => opcion(v, v, metaDiaria())).join("")}</select></label>
       <label for="velocidad">Velocidad de la voz<select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => opcion(v, v + "×", velocidadVoz())).join("")}</select></label>
@@ -349,6 +356,10 @@ const $menu = document.getElementById("menu");
 function abrirMenu() {
   $menu.querySelector(".menu-panel").innerHTML = `
     <div class="menu-cabeza"><img src="iconos/logo.webp" alt=""><b>Finlay</b></div>
+    <div class="menu-tema" role="group" aria-label="Apariencia">
+      ${[["claro", "sol", "Claro"], ["oscuro", "luna", "Oscuro"], ["hora", "reloj", "Por la hora"]].map(([v, i, t]) =>
+        `<button data-accion="tema" data-tema="${v}" class="${pref("tema", "hora") === v ? "activo" : ""}">${ico(i)}<span>${t}</span></button>`).join("")}
+    </div>
     <a href="#/temas">${ico("buscar")} Buscar en toda la carrera</a>
     <a href="#/biblioteca">${ico("libro")} Todos los materiales</a>
     <a href="#/planes">${ico("calendario")} Plan para el examen</a>
@@ -361,6 +372,30 @@ function abrirMenu() {
 function cerrarMenu() {
   $menu.hidden = true;
 }
+
+// ---------- Apariencia: clara, oscura o automática por la hora ----------
+function temaReal(eleccion = pref("tema", "hora")) {
+  if (eleccion === "claro" || eleccion === "oscuro") return eleccion;
+  if (eleccion === "telefono") return matchMedia("(prefers-color-scheme: dark)").matches ? "oscuro" : "claro";
+  const h = new Date().getHours();
+  return h >= 19 || h < 7 ? "oscuro" : "claro"; // de 7 de la noche a 7 de la mañana: oscuro
+}
+function aplicarTema() {
+  const t = temaReal();
+  if (document.documentElement.dataset.tema !== t) document.documentElement.dataset.tema = t;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "oscuro" ? "#071521" : "#e9f7f8");
+}
+function cambiarTema(valor) {
+  guardarPref("tema", valor);
+  aplicarTema();
+  document.querySelectorAll(".menu-tema button").forEach((b) => b.classList.toggle("activo", b.dataset.tema === valor));
+  const sel = document.getElementById("aj-tema");
+  if (sel) sel.value = valor;
+}
+aplicarTema();
+setInterval(aplicarTema, 60 * 1000);
+document.addEventListener("visibilitychange", () => !document.hidden && aplicarTema());
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", aplicarTema);
 
 // ---------- Barra inferior ----------
 const PESTANAS = [
@@ -1564,6 +1599,8 @@ document.addEventListener("click", async (ev) => {
     mostrarPregunta(Number(b.dataset.i));
   } else if (accion === "menu") {
     abrirMenu();
+  } else if (accion === "tema") {
+    cambiarTema(b.dataset.tema);
   } else if (accion === "cerrar-menu") {
     if (ev.target === b) cerrarMenu();
   } else if (accion === "ampliar") {
@@ -1642,11 +1679,7 @@ document.addEventListener("change", (ev) => {
     guardarPref("nombre", ev.target.value.trim());
     aviso("Nombre guardado");
   }
-  if (ev.target.id === "aj-tema") {
-    guardarPref("tema", ev.target.value);
-    if (ev.target.value) document.documentElement.dataset.tema = ev.target.value;
-    else delete document.documentElement.dataset.tema;
-  }
+  if (ev.target.id === "aj-tema") cambiarTema(ev.target.value);
   if (ev.target.id === "aj-escala") {
     guardarPref("escala", ev.target.value === "1" ? "" : ev.target.value);
     document.documentElement.style.setProperty("--escala", ev.target.value);
@@ -1747,6 +1780,7 @@ router().then(cargarPaquetesIncluidos);
 
 // En el APK pueden venir paquetes dentro de la app: se cargan solos la primera vez
 async function cargarPaquetesIncluidos() {
+  if (!window.FinlayAndroid) return; // solo el APK trae paquetes dentro
   let lista;
   try {
     const r = await fetch("paquetes/lista.json", { cache: "no-store" });

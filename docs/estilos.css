@@ -1,37 +1,45 @@
 /* Finlay · diseño 1.2 (según la maqueta): claro, verde azulado, tarjetas blancas redondeadas */
 :root {
-  --fondo: #eef6f5;
-  --fondo-2: #dff0ee;
+  --fondo: #f4f9fb;
+  --fondo-2: #e6f6f8;
   --tarjeta: #ffffff;
-  --texto: #15302d;
-  --suave: #5a706d;
-  --borde: #d6e6e3;
-  --acento: #0f6e6e;
-  --acento-2: #14958f;
+  --texto: #0f2233;
+  --suave: #5b6f7c;
+  --borde: #dde9ee;
+  --acento: #0d7f8c;
+  --acento-2: #14b8c4;
   --acento-texto: #ffffff;
   --naranja: #e8952d;
   --naranja-suave: #fdf0dc;
   --marca: #ffe58a;
   --peligro: #b3261e;
   --exito: #2e7d32;
-  --sombra: 0 6px 18px rgba(15, 110, 110, .10);
+  --sombra: 0 8px 24px rgba(20, 120, 150, .10);
+  --deco: radial-gradient(70% 38% at 105% -4%, rgba(20, 184, 196, .30), transparent 70%),
+          radial-gradient(55% 30% at -5% 104%, rgba(155, 79, 224, .16), transparent 70%);
+  --brillo: .28;
   --radio: 20px;
   --escala: 1;
   color-scheme: light;
 }
+/* Diseño oscuro (noche): azul marino con brillo turquesa */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-tema="claro"]) {
-    --fondo: #0e1716; --fondo-2: #102624; --tarjeta: #172321; --texto: #e3efed; --suave: #9db5b1;
-    --borde: #29403c; --acento: #4fc1ba; --acento-2: #2aa59e; --acento-texto: #04201e;
+  :root:not([data-tema]) {
+    --fondo: #061320; --fondo-2: #0a1c2b; --tarjeta: #0e2133; --texto: #e8f4f7; --suave: #93abb8;
+    --borde: #1c3a4e; --acento: #2dd4cf; --acento-2: #14b8c4; --acento-texto: #032125;
     --naranja: #f2a94b; --naranja-suave: #3a2c17; --marca: #6b5a12; --peligro: #ff8a80; --exito: #7ad59a;
-    --sombra: 0 6px 18px rgba(0, 0, 0, .35); color-scheme: dark;
+    --sombra: 0 8px 24px rgba(0, 0, 0, .45); --brillo: .55; color-scheme: dark;
+    --deco: radial-gradient(70% 38% at 105% -4%, rgba(45, 212, 207, .26), transparent 70%),
+            radial-gradient(70% 30% at 100% 104%, rgba(20, 184, 196, .22), transparent 70%);
   }
 }
 :root[data-tema="oscuro"] {
-  --fondo: #0e1716; --fondo-2: #102624; --tarjeta: #172321; --texto: #e3efed; --suave: #9db5b1;
-  --borde: #29403c; --acento: #4fc1ba; --acento-2: #2aa59e; --acento-texto: #04201e;
+  --fondo: #061320; --fondo-2: #0a1c2b; --tarjeta: #0e2133; --texto: #e8f4f7; --suave: #93abb8;
+  --borde: #1c3a4e; --acento: #2dd4cf; --acento-2: #14b8c4; --acento-texto: #032125;
   --naranja: #f2a94b; --naranja-suave: #3a2c17; --marca: #6b5a12; --peligro: #ff8a80; --exito: #7ad59a;
-  --sombra: 0 6px 18px rgba(0, 0, 0, .35); color-scheme: dark;
+  --sombra: 0 8px 24px rgba(0, 0, 0, .45); --brillo: .55; color-scheme: dark;
+  --deco: radial-gradient(70% 38% at 105% -4%, rgba(45, 212, 207, .26), transparent 70%),
+          radial-gradient(70% 30% at 100% 104%, rgba(20, 184, 196, .22), transparent 70%);
 }
 
 * { box-sizing: border-box; }
@@ -39,7 +47,9 @@
 html { -webkit-text-size-adjust: 100%; font-size: calc(16px * var(--escala)); }
 body {
   margin: 0;
-  background: linear-gradient(180deg, var(--fondo-2) 0, var(--fondo) 320px) fixed, var(--fondo);
+  background: var(--deco), var(--fondo);
+  background-attachment: fixed;
+  transition: background-color .4s, color .4s;
   color: var(--texto);
   font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -98,7 +108,36 @@ h2 { font-size: 1rem; color: var(--suave); margin: 22px 0 10px; }
   background: var(--tarjeta); border: 1px solid var(--borde); border-radius: var(--radio);
   padding: 14px 16px; color: var(--texto); text-decoration: none; box-shadow: var(--sombra);
 }
-.tarjeta.anio { min-height: 84px; justify-content: center; }
+/* Tarjetas de los años: ícono de color, borde que brilla y una ola abajo */
+.tarjeta.anio {
+  position: relative; overflow: hidden; min-height: 150px; padding: 14px 14px 16px; gap: 10px;
+  border: 2px solid color-mix(in srgb, var(--c) 55%, transparent);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--c) calc(var(--brillo) * 60%), transparent);
+}
+.tarjeta.anio.con-asig { border-color: var(--c); box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), 0 8px 26px color-mix(in srgb, var(--c) calc(var(--brillo) * 100%), transparent); }
+.tarjeta.anio::after {
+  content: ""; position: absolute; right: -12%; bottom: -26px; width: 95%; height: 58px; border-radius: 50% 50% 0 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--c) 55%, transparent));
+  transform: rotate(-6deg); pointer-events: none;
+}
+.anio-ico {
+  width: 58px; height: 58px; border-radius: 50%; display: grid; place-items: center; color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.anio-ico .ico { width: 32px; height: 32px; }
+.anio-check {
+  position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--c); color: #fff;
+}
+.anio-check .ico { width: 16px; height: 16px; stroke-width: 3; }
+.anio-pie { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; position: relative; z-index: 1; }
+.anio-pie > span:first-child { display: flex; flex-direction: column; }
+.tarjeta.anio .grande { font-size: 1.2rem; }
+.anio-flecha {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none;
+  background: color-mix(in srgb, var(--c) 14%, var(--tarjeta)); color: var(--texto);
+}
+.anio-flecha .ico { width: 18px; height: 18px; }
 .tarjeta.fila { margin-bottom: 10px; }
 .grande { font-weight: 700; font-size: 1.05rem; }
 .sub { color: var(--suave); font-size: .85rem; }
@@ -517,3 +556,23 @@ h2.semestre .sub { font-weight: 400; }
 /* En el APK las conferencias ya vienen dentro: se ocultan los botones de cargar */
 .app-completa .solo-manual { display: none !important; }
 .app-completa .btn-explorar { background: var(--acento); color: #fff; border-color: var(--acento); }
+
+/* Títulos de sección con una barrita de color, como en el diseño */
+main > h2, .panel > h2 { color: var(--texto); padding-left: 12px; position: relative; }
+main > h2::before, .panel > h2::before {
+  content: ""; position: absolute; left: 0; top: .15em; bottom: .15em; width: 4px; border-radius: 4px;
+  background: linear-gradient(180deg, var(--acento-2), #2f7ff0);
+}
+/* Botón de buscar redondo y con brillo */
+.buscador .btn { border-radius: 999px; min-width: 52px; background: linear-gradient(135deg, var(--acento-2), #2f7ff0); color: #fff; border: 0;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--acento-2) 45%, transparent); }
+.buscador input { border-radius: 999px; padding-left: 18px; }
+/* Selector rápido de apariencia en el menú */
+.menu-tema { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 0 0 12px; padding: 4px; border-radius: 14px; background: var(--fondo-2); }
+.menu-panel .menu-tema button { flex-direction: column; gap: 2px; justify-content: center; padding: 8px 4px; font-size: .75rem; border-radius: 10px; }
+.menu-panel .menu-tema button.activo { background: var(--tarjeta); color: var(--acento); box-shadow: var(--sombra); }
+/* Diseño oscuro: tarjetas como vidrio */
+:root[data-tema="oscuro"] .tarjeta { background: color-mix(in srgb, var(--tarjeta) 88%, transparent); }
+:root[data-tema="oscuro"] .tarjeta.anio { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 10%, var(--tarjeta)), var(--tarjeta)); }
+:root[data-tema="oscuro"] .anio-check { color: #032125; }
+:root[data-tema="oscuro"] .diapo img { filter: brightness(.92); }
