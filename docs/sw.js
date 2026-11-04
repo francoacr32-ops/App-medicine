@@ -1,12 +1,18 @@
 // Permite abrir Finlay sin conexión y ahorra datos: los archivos se guardan en el teléfono.
 
-const VERSION = "finlay-v9";
+const VERSION = "finlay-v10";
 const BASICOS = [
   "./",
   "index.html",
   "estilos.css",
   "manifest.webmanifest",
-  "iconos/icono.svg",
+  "iconos/icono-192.png",
+  "iconos/logo.webp",
+  "iconos/retrato-finlay.webp",
+  "iconos/cruz.webp",
+  "iconos/asig-celula.webp",
+  "iconos/asig-adn.webp",
+  "iconos/asig-embrion.webp",
   "js/app.js",
   "js/db.js",
   "js/texto.js",
@@ -17,6 +23,8 @@ const BASICOS = [
   "js/cuestionario.js",
   "js/estudio.js",
   "js/guia.js",
+  "js/iconos.js",
+  "js/inicio.js",
 ];
 
 self.addEventListener("install", (e) => {

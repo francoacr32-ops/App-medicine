@@ -8,12 +8,13 @@ import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
 import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata } from "./cuestionario.js";
 import { localizar } from "./guia.js";
+import { ico } from "./iconos.js";
+import { pref, guardarPref, htmlMiniatura, htmlAnillo, htmlPulso, htmlSemana, insignias } from "./inicio.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
 const $app = document.getElementById("app");
-const $titulo = document.getElementById("titulo");
-const $atras = document.getElementById("atras");
+const $cabecera = document.getElementById("cabecera");
 
 // ---------- Utilidades ----------
 const esc = (s) =>
@@ -69,10 +70,22 @@ function cita(doc, etiqueta, pagina) {
   return `${icono(doc)} <b>${esc(doc.nombre)}</b> — ${esc(etiqueta)} ${pagina}`;
 }
 
+/**
+ * Pinta una pantalla. Con `titulo` null se muestra la cabecera de marca (inicio):
+ * retrato de Finlay, nombre, "ESTUDIO MÉDICO" y el menú ☰.
+ */
 function poner(titulo, html, atras = null) {
-  $titulo.textContent = titulo;
-  $atras.hidden = !atras;
-  $atras.dataset.destino = atras || "";
+  if (titulo === null) {
+    $cabecera.className = "barra marca";
+    $cabecera.innerHTML = `<img class="marca-retrato" src="iconos/retrato-finlay.webp" alt="Carlos J. Finlay">
+      <div class="marca-texto"><span class="marca-nombre">Finlay</span><span class="marca-sub">ESTUDIO MÉDICO</span></div>
+      <button class="btn-icono" data-accion="menu" aria-label="Menú">${ico("menu")}</button>`;
+  } else {
+    $cabecera.className = "barra";
+    $cabecera.innerHTML = `${atras ? `<button class="atras" data-accion="volver" data-destino="${esc(atras)}" aria-label="Atrás">${ico("atras")}</button>` : ""}
+      <h1>${esc(titulo)}</h1>
+      <button class="btn-icono" data-accion="menu" aria-label="Menú">${ico("menu")}</button>`;
+  }
   $app.innerHTML = html;
   window.scrollTo(0, 0);
   cargarImagenes($app);
@@ -106,60 +119,259 @@ function cerrarLupa(desdeHistorial = false) {
   return true;
 }
 
-// ---------- Pantalla: inicio ----------
+// ---------- Pantalla: Inicio (diseño de la maqueta) ----------
+async function progresoAsignatura(asig) {
+  const docs = await db.documentosDeAsignatura(asig.id);
+  let total = 0;
+  let bien = 0;
+  for (const d of docs) {
+    if (!d.cuestionario?.length) continue;
+    total += d.cuestionario.length;
+    bien += (await db.respuestasDe(d.id)).filter((r) => r.ultima).length;
+  }
+  return { docs, total, bien, pct: total ? Math.round((bien / total) * 100) : 0 };
+}
+
+function htmlTarjetaAsignatura(a, p) {
+  return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">
+    ${htmlMiniatura(a.nombre)}
+    <span class="asig-cuerpo">
+      <span class="asig-nombre">${esc(a.nombre)}</span>
+      ${p.total
+        ? `<span class="asig-barra"><span class="barra-progreso"><span class="en-camino" style="width:${p.pct}%"></span></span><b>${p.pct}%</b></span>`
+        : `<span class="sub">${p.docs.length} tema${p.docs.length === 1 ? "" : "s"}</span>`}
+    </span>
+    ${ico("chevron", "flecha-der")}
+  </a>`;
+}
+
 async function vistaInicio() {
+  const docs = await db.listarDocumentos();
+  const nombre = pref("nombre");
+  if (!docs.length) {
+    return poner(null, `
+      <section class="bienvenida">
+        <img src="iconos/cruz.webp" alt="" class="bienvenida-cruz">
+        <h2 class="hola">¡Bienvenido${nombre ? ", " + esc(nombre) : ""} a Finlay!</h2>
+        <p>Tu app para estudiar Medicina con tus conferencias, libros y clases taller, sin internet.</p>
+        <button class="btn btn-repasar" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
+        <a class="btn secundario" href="#/temas">Explorar los temas</a>
+        <p class="nota">En honor a Carlos J. Finlay, el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p>
+      </section>`);
+  }
+  const { racha, hoy: deHoy } = calcularRacha(await db.listarDiario());
+  const meta = metaDiaria();
+  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
+  const { lista } = preguntasDelRepaso(conPreguntas, await db.todasLasRespuestas(), meta);
+
+  // Examen más cercano
+  let plan = "";
+  const planes = (await db.listarPlanes()).filter((p) => diasHasta(p.fecha) >= 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  if (planes.length) {
+    const p = planes[0];
+    const dias = repartirPlan(p.fecha, await temasConEstado(p.asignatura));
+    const deHoyPlan = dias.find((d) => d.fecha === db.hoy());
+    const que = deHoyPlan?.repasoGeneral ? "Repaso general" : deHoyPlan?.temas.map((t) => t.doc.nombre.split(" - ")[0]).join(" · ");
+    plan = `<a class="tarjeta fila-tarjeta" href="#/plan/${p.id}">
+      <span class="icono-caja naranja">${ico("calendario")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">${esc(p.nombre)} · <b class="texto-naranja">${textoDias(diasHasta(p.fecha))}</b></span>
+      <span class="sub">${esc(p.asignatura.split("|")[1])}${que ? " · Hoy: " + esc(que) : ""}</span></span>
+      ${ico("chevron", "flecha-der")}</a>`;
+  }
+
+  // Continuar donde lo dejaste
+  let continuar = "";
+  const ultimo = pref("ultimo");
+  const docUltimo = ultimo && docs.find((d) => d.id === ultimo);
+  if (docUltimo) {
+    continuar = `<a class="tarjeta fila-tarjeta" href="#/doc/${docUltimo.id}">
+      <span class="icono-caja">${ico("play")}</span>
+      <span class="asig-cuerpo"><span class="sub">Continuar donde lo dejaste</span>
+      <span class="asig-nombre">${esc(docUltimo.nombre)}</span></span>${ico("chevron", "flecha-der")}</a>`;
+  }
+
+  // Asignaturas con materiales
+  const asigs = (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id)));
+  const tarjetas = [];
+  for (const a of asigs) tarjetas.push(htmlTarjetaAsignatura(a, await progresoAsignatura(a)));
+
+  poner(null, `
+    <section class="saludo">
+      <div class="saludo-izq">
+        <h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""}</h2>
+        <p class="animo">${deHoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p>
+        ${htmlPulso}
+      </div>
+      <div class="saludo-der">
+        <span class="pastilla-racha">${ico("llama")}<b>${racha}</b> día${racha === 1 ? "" : "s"} seguido${racha === 1 ? "" : "s"}</span>
+        ${htmlAnillo(deHoy.preguntas, meta)}
+      </div>
+    </section>
+    ${lista.length
+      ? `<a class="btn btn-repasar" href="#/repaso">${ico("playc")}<span>Repasar hoy</span><span class="contador">${lista.length}</span>${ico("chevron")}</a>`
+      : `<a class="btn btn-repasar" href="#/examen">${ico("check")}<span>¡Al día! Hacer un examen</span>${ico("chevron")}</a>`}
+    ${plan}
+    ${continuar}
+    <div class="lista-asig">${tarjetas.join("")}</div>
+  `);
+}
+
+// ---------- Pantalla: Temas (años, buscador y materiales) ----------
+async function vistaTemas() {
   const asigs = await db.listarAsignaturas();
   const docs = await db.listarDocumentos();
-  let espacio = "";
-  if (navigator.storage?.estimate) {
-    const { usage } = await navigator.storage.estimate();
-    espacio = `Espacio usado en el teléfono: ${(usage / 1048576).toFixed(1)} MB`;
-  }
   const tarjetas = ANIOS.map((nombre, i) => {
     const n = asigs.filter((a) => a.anio === i + 1).length;
     return `<a class="tarjeta anio" href="#/anio/${i + 1}">
       <span class="grande">${esc(nombre)}</span>
       <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></a>`;
   }).join("");
+  poner("Temas", `
+    <form class="buscador" data-ambito="todo">
+      <input name="q" type="search" placeholder="Buscar en toda la carrera…" autocomplete="off" required>
+      <button class="btn" aria-label="Buscar">${ico("buscar")}</button>
+    </form>
+    <h2>Elige un año</h2>
+    <div class="rejilla">${tarjetas}</div>
+    <button class="btn ancho" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>
+    <p class="nota centro">${docs.length} materiales cargados · <a href="#/biblioteca">Ver todos</a></p>`);
+}
 
-  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
-  let panel = "";
-  if (conPreguntas.length) {
-    const { racha, hoy: deHoy } = calcularRacha(await db.listarDiario());
-    const meta = metaDiaria();
-    const { lista } = preguntasDelRepaso(conPreguntas, await db.todasLasRespuestas(), meta);
-    const pct = Math.min(100, Math.round((deHoy.preguntas / meta) * 100));
-    panel = `<section class="panel">
-        <div class="racha"><span>🔥 <b>${racha}</b> día${racha === 1 ? "" : "s"} seguido${racha === 1 ? "" : "s"}</span>
-          <span>Hoy: <b>${deHoy.preguntas}</b> de ${meta} preguntas${deHoy.preguntas >= meta ? " ✅" : ""}</span></div>
-        <span class="barra-progreso"><span class="${pct >= 100 ? "dominado" : "en-camino"}" style="width:${pct}%"></span></span>
-        ${lista.length
-          ? `<a class="btn ancho" href="#/repaso">🧠 Repaso del día (${lista.length} preguntas)</a>`
-          : `<p class="centro">🧠 Repaso del día: ¡estás al día! 🎉</p>`}
-        ${await planDeHoy()}
-      </section>`;
+// ---------- Pantalla: Progreso (estadísticas e insignias) ----------
+async function vistaProgresoGeneral() {
+  const diario = await db.listarDiario();
+  const { racha } = calcularRacha(diario);
+  const respuestas = await db.todasLasRespuestas();
+  const totalRespondidas = diario.reduce((s, d) => s + d.preguntas, 0);
+  const totalBien = diario.reduce((s, d) => s + d.correctas, 0);
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  let temasDominados = 0;
+  for (const d of docs) if ((await estadoDe(d)).estado === "dominado") temasDominados++;
+  const examenes = await db.listarExamenes();
+  const mejorNota = examenes.reduce((m, e) => Math.max(m, e.nota), 0);
+  const lista = insignias({ racha, totalRespondidas, temasDominados, mejorNota });
+  const asigs = (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id)));
+  const filas = [];
+  for (const a of asigs) {
+    const p = await progresoAsignatura(a);
+    filas.push(`<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}/progreso">${htmlMiniatura(a.nombre)}
+      <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
+      <span class="asig-barra"><span class="barra-progreso"><span class="en-camino" style="width:${p.pct}%"></span></span><b>${p.pct}%</b></span>
+      <span class="sub">${p.bien} de ${p.total} preguntas dominadas</span></span>${ico("chevron", "flecha-der")}</a>`);
   }
-  poner(
-    "Finlay",
-    `${panel}
-     <nav class="accesos">
-       <a href="#/examen">📝<span>Examen</span></a>
-       <a href="#/planes">📅<span>Plan</span></a>
-       <a href="#/copia">💾<span>Copia</span></a>
-       <a href="#/ayuda">❓<span>Ayuda</span></a>
-     </nav>
-     <form class="buscador" data-ambito="todo">
-       <input name="q" type="search" placeholder="Buscar en toda la carrera…" autocomplete="off" required>
-       <button class="btn">Buscar</button>
-     </form>
-     <h2>Elige un año</h2>
-     <div class="rejilla">${tarjetas}</div>
-     <p class="nota">${docs.length} materiales cargados. ${esc(espacio)}</p>
-     <button class="btn ancho" data-accion="paquete">📥 Cargar paquete de Claude (conferencias, resúmenes y cuestionarios)</button>
-     <p class="nota"><a href="#/biblioteca">Ver todos los materiales</a> · <a href="#/ayuda">Cómo usar Finlay</a></p>
-     <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>`
-  );
+  poner("Progreso", `
+    <div class="cifras">
+      <div class="tarjeta cifra">${ico("llama", "texto-naranja")}<b>${racha}</b><span>días seguidos</span></div>
+      <div class="tarjeta cifra">${ico("check")}<b>${totalRespondidas}</b><span>respondidas</span></div>
+      <div class="tarjeta cifra">${ico("trofeo")}<b>${totalRespondidas ? Math.round((totalBien / totalRespondidas) * 100) : 0}%</b><span>de aciertos</span></div>
+    </div>
+    <h2>Esta semana</h2>
+    <div class="tarjeta">${htmlSemana(diario, db.hoy())}</div>
+    <h2>Por asignatura</h2>
+    ${filas.join("") || `<p class="vacio">Cuando respondas cuestionarios, aquí verás tu avance.</p>`}
+    <h2>Insignias · ${lista.filter((x) => x.ok).length} de ${lista.length}</h2>
+    <div class="insignias">${lista.map((x) => `<div class="insignia ${x.ok ? "ganada" : ""}" title="${esc(x.d)}">
+      <span class="insignia-emoji">${x.e}</span><b>${esc(x.t)}</b><span class="sub">${esc(x.d)}</span></div>`).join("")}</div>
+    <p class="nota centro">${respuestas.length} preguntas distintas practicadas.</p>`);
+}
+
+// ---------- Pantalla: Evaluaciones (repaso, examen y plan) ----------
+async function vistaEvaluaciones() {
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  const { lista } = preguntasDelRepaso(docs, await db.todasLasRespuestas(), metaDiaria());
+  const planes = (await db.listarPlanes()).filter((p) => diasHasta(p.fecha) >= 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const examenes = (await db.listarExamenes()).sort((a, b) => b.fecha - a.fecha).slice(0, 5);
+  poner("Evaluaciones", `
+    <a class="tarjeta fila-tarjeta" href="#/repaso"><span class="icono-caja">${ico("repaso")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Repaso del día</span>
+      <span class="sub">${lista.length ? `${lista.length} preguntas te esperan hoy` : "¡Estás al día!"}</span></span>${ico("chevron", "flecha-der")}</a>
+    <a class="tarjeta fila-tarjeta" href="#/examen"><span class="icono-caja">${ico("examen")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Examen de práctica</span>
+      <span class="sub">Con cronómetro y nota de 2 a 5</span></span>${ico("chevron", "flecha-der")}</a>
+    <a class="tarjeta fila-tarjeta" href="#/planes"><span class="icono-caja naranja">${ico("calendario")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Plan para el examen</span>
+      <span class="sub">${planes.length ? `${esc(planes[0].nombre)}: ${textoDias(diasHasta(planes[0].fecha))}` : "Pon la fecha de tu próxima prueba"}</span></span>${ico("chevron", "flecha-der")}</a>
+    ${examenes.length ? `<h2>Tus últimas notas</h2><ul class="docs">${examenes
+      .map((e) => `<li class="doc"><span><b class="nota-num n${e.nota}">${e.nota}</b> ${esc(e.titulo)}</span>
+        <span class="sub">${new Date(e.fecha).toLocaleDateString("es")} · ${e.porcentaje} % · ${e.cantidad} preguntas</span></li>`).join("")}</ul>` : ""}`);
+}
+
+// ---------- Pantalla: Perfil (nombre y ajustes) ----------
+async function vistaPerfil() {
+  const docs = await db.listarDocumentos();
+  let espacio = "";
+  if (navigator.storage?.estimate) {
+    try {
+      const { usage } = await navigator.storage.estimate();
+      espacio = ` · ${(usage / 1048576).toFixed(1)} MB usados`;
+    } catch {}
+  }
+  const opcion = (v, t, actual) => `<option value="${v}" ${String(v) === String(actual) ? "selected" : ""}>${t}</option>`;
+  poner("Perfil", `
+    <section class="tarjeta perfil-cabeza">
+      <img src="iconos/logo.webp" alt="" class="perfil-logo">
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.2</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+    </section>
+    <h2>Tus datos</h2>
+    <div class="tarjeta ajustes">
+      <label for="aj-nombre">Tu nombre<input id="aj-nombre" value="${esc(pref("nombre"))}" maxlength="30" placeholder="Para saludarte en el inicio"></label>
+    </div>
+    <h2>Ajustes</h2>
+    <div class="tarjeta ajustes">
+      <label for="aj-tema">Apariencia<select id="aj-tema">${opcion("", "Igual que el teléfono", pref("tema"))}${opcion("claro", "Clara", pref("tema"))}${opcion("oscuro", "Oscura", pref("tema"))}</select></label>
+      <label for="aj-escala">Tamaño de letra<select id="aj-escala">${opcion("1", "Normal", pref("escala", "1"))}${opcion("1.12", "Grande", pref("escala", "1"))}${opcion("1.25", "Muy grande", pref("escala", "1"))}</select></label>
+      <label for="meta">Meta diaria de preguntas<select id="meta">${[5, 10, 15, 20, 30, 50, 60].map((v) => opcion(v, v, metaDiaria())).join("")}</select></label>
+      <label for="velocidad">Velocidad de la voz<select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => opcion(v, v + "×", velocidadVoz())).join("")}</select></label>
+    </div>
+    <h2>Tus materiales</h2>
+    <a class="tarjeta fila-tarjeta" href="#/copia"><span class="icono-caja">${ico("copia")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Copia y compartir</span><span class="sub">Guarda tu progreso o pásalo por Zapya</span></span>${ico("chevron", "flecha-der")}</a>
+    <button class="tarjeta fila-tarjeta boton-fila" data-accion="paquete"><span class="icono-caja">${ico("cargar")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Cargar paquete de Claude</span><span class="sub">Conferencias, resúmenes y cuestionarios</span></span>${ico("chevron", "flecha-der")}</button>
+    <a class="tarjeta fila-tarjeta" href="#/ayuda"><span class="icono-caja">${ico("ayuda")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Cómo usar Finlay</span><span class="sub">Guía rápida</span></span>${ico("chevron", "flecha-der")}</a>
+    <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
+    <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`);
   mostrarBotonInstalar();
+}
+
+// ---------- Menú ☰ ----------
+const $menu = document.getElementById("menu");
+function abrirMenu() {
+  $menu.querySelector(".menu-panel").innerHTML = `
+    <div class="menu-cabeza"><img src="iconos/logo.webp" alt=""><b>Finlay</b></div>
+    <a href="#/temas">${ico("buscar")} Buscar en toda la carrera</a>
+    <a href="#/biblioteca">${ico("libro")} Todos los materiales</a>
+    <a href="#/planes">${ico("calendario")} Plan para el examen</a>
+    <button data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>
+    <a href="#/copia">${ico("copia")} Copia y compartir</a>
+    <a href="#/perfil">${ico("ajustes")} Ajustes</a>
+    <a href="#/ayuda">${ico("ayuda")} Cómo usar Finlay</a>`;
+  $menu.hidden = false;
+}
+function cerrarMenu() {
+  $menu.hidden = true;
+}
+
+// ---------- Barra inferior ----------
+const PESTANAS = [
+  ["inicio", "#/", "Inicio", "inicio"],
+  ["temas", "#/temas", "Temas", "estudiar"],
+  ["progreso", "#/progreso", "Progreso", "grafica"],
+  ["evaluaciones", "#/evaluaciones", "Evaluaciones", "examen"],
+  ["perfil", "#/perfil", "Perfil", "yo"],
+];
+const SECCION_DE_RUTA = {
+  "": "inicio", temas: "temas", anio: "temas", asig: "temas", doc: "temas", leer: "temas", buscar: "temas", biblioteca: "temas",
+  progreso: "progreso",
+  evaluaciones: "evaluaciones", repaso: "evaluaciones", examen: "evaluaciones", "examen-hacer": "evaluaciones", planes: "evaluaciones", plan: "evaluaciones",
+  perfil: "perfil", copia: "perfil", ayuda: "perfil",
+};
+function pintarNav(ruta) {
+  const activa = SECCION_DE_RUTA[ruta] || "inicio";
+  document.getElementById("nav").innerHTML = PESTANAS.map(([id, href, texto, icono]) =>
+    `<a href="${href}" class="${id === activa ? "activa" : ""}" ${id === activa ? 'aria-current="page"' : ""}>${ico(icono)}<span>${texto}</span></a>`
+  ).join("");
 }
 
 // ---------- Pantalla: un año (asignaturas separadas por semestre) ----------
@@ -349,7 +561,7 @@ async function vistaLeer(docId, pagina, q) {
      ${nav}`,
     `#/doc/${docId}/texto`
   );
-  if (q) $atras.dataset.destino = "historial";
+  if (q) document.querySelector("[data-accion=volver]")?.setAttribute("data-destino", "historial");
   vistaLeer.texto = texto;
   const primera = $app.querySelector("mark");
   if (primera) primera.scrollIntoView({ block: "center" });
@@ -360,6 +572,7 @@ async function vistaLeer(docId, pagina, q) {
 async function vistaDoc(docId, pestana) {
   const doc = await db.obtenerDocumento(docId);
   if (!doc) return (location.hash = "#/");
+  guardarPref("ultimo", docId);
   if (!pestana) pestana = doc.resumen ? "resumen" : doc.cuestionario ? "cuestionario" : "texto";
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
@@ -408,6 +621,7 @@ async function vistaDoc(docId, pestana) {
     enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
   );
   vistaDoc.doc = doc;
+  if (pestana === "cuestionario") iniciarSesion(false);
 }
 
 // ---------- Motor de preguntas (sirve para el cuestionario, el repaso y el examen) ----------
@@ -528,10 +742,12 @@ async function responder(k, valor) {
     elegidasExamen.set(k, valor);
     tarjeta.querySelectorAll(".opcion").forEach((b) => b.classList.toggle("elegida", b.dataset.r === String(valor)));
     alResponder(k);
+    if (sesion) actualizarMapa();
     return;
   }
   const r = corregir(p, tarjeta, valor);
   if (!r) return aviso("Responde todas las partes antes de comprobar.");
+  preguntaRespondida();
   if (p.tipo !== "abierta") mostrarCorreccion(k, r);
   else if (!r.correcta) tarjeta.querySelector(".explicacion .acciones")?.insertAdjacentHTML("afterbegin", botonGuia(k));
   await db.guardarRespuesta(doc.id, i, r.correcta);
@@ -554,6 +770,71 @@ function verRespuesta(k) {
       <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>
     </div>`;
   caja.hidden = false;
+}
+
+
+// ---------- Una pregunta por pantalla (cuestionario, repaso y examen) ----------
+let sesion = null;
+
+function iniciarSesion(examen = false) {
+  const tarjetas = [...$app.querySelectorAll(".pregunta")];
+  sesion = null;
+  if (tarjetas.length < 2) return;
+  const barra = document.createElement("div");
+  barra.className = "sesion-barra";
+  barra.innerHTML = `<span id="ses-pos"></span><span class="barra-progreso"><span class="en-camino" id="ses-avance"></span></span>`;
+  tarjetas[0].before(barra);
+  const nav = document.createElement("div");
+  nav.className = "sesion-nav";
+  nav.innerHTML = `<button class="btn secundario" data-accion="ses-ant">${ico("atras")} Anterior</button>
+    <button class="btn" data-accion="ses-sig">Siguiente ${ico("chevron")}</button>`;
+  tarjetas[tarjetas.length - 1].after(nav);
+  if (examen) {
+    const mapa = document.createElement("div");
+    mapa.className = "sesion-mapa";
+    mapa.innerHTML = tarjetas.map((t, i) => `<button data-accion="ses-ir" data-i="${i}" aria-label="Ir a la pregunta ${i + 1}">${i + 1}</button>`).join("");
+    nav.after(mapa);
+  }
+  sesion = { tarjetas, actual: 0, examen };
+  mostrarPregunta(0, false);
+}
+
+function mostrarPregunta(i, desplazar = true) {
+  if (!sesion) return;
+  const { tarjetas } = sesion;
+  sesion.actual = Math.max(0, Math.min(i, tarjetas.length - 1));
+  tarjetas.forEach((t, k) => (t.hidden = k !== sesion.actual));
+  document.getElementById("ses-pos").textContent = `Pregunta ${sesion.actual + 1} de ${tarjetas.length}`;
+  document.getElementById("ses-avance").style.width = `${((sesion.actual + 1) / tarjetas.length) * 100}%`;
+  const ant = $app.querySelector("[data-accion=ses-ant]");
+  const sig = $app.querySelector("[data-accion=ses-sig]");
+  ant.disabled = sesion.actual === 0;
+  sig.hidden = sesion.actual === tarjetas.length - 1;
+  sig.classList.remove("listo");
+  if (sesion.examen) actualizarMapa();
+  if (desplazar) $app.querySelector(".sesion-barra").scrollIntoView({ block: "start", behavior: "smooth" });
+}
+
+function actualizarMapa() {
+  $app.querySelectorAll("[data-accion=ses-ir]").forEach((b) => {
+    const k = Number(b.dataset.i);
+    b.classList.toggle("actual", k === sesion.actual);
+    b.classList.toggle("respondida", respondidaEnExamen(Number(sesion.tarjetas[k].id.slice(1))));
+  });
+}
+
+/** Tras responder: resalta "Siguiente" para avanzar. */
+function preguntaRespondida() {
+  if (!sesion || sesion.examen) return;
+  $app.querySelector("[data-accion=ses-sig]")?.classList.add("listo");
+}
+
+/** Muestra todas las preguntas (por ejemplo, al revisar un examen entregado). */
+function salirSesion() {
+  if (!sesion) return;
+  sesion.tarjetas.forEach((t) => (t.hidden = false));
+  $app.querySelectorAll(".sesion-barra, .sesion-nav, .sesion-mapa").forEach((e) => e.remove());
+  sesion = null;
 }
 
 // ---------- Cuestionario de un documento ----------
@@ -611,6 +892,7 @@ async function vistaRepaso() {
         <p>Acertaste ${bien} de ${lista.length}. 🔥 Racha: ${racha} día${racha === 1 ? "" : "s"}.</p>
         <p class="nota">Las que fallaste volverán mañana; las que acertaste, dentro de unos días.</p>
         <a class="btn" href="#/">Volver al inicio</a></div>`;
+      $app.querySelector("[data-accion=ses-sig]")?.setAttribute("hidden", "");
       document.getElementById("fin").scrollIntoView({ behavior: "smooth" });
     }
   };
@@ -620,8 +902,9 @@ async function vistaRepaso() {
      <p class="nota">Preguntas elegidas para hoy: primero las que te toca repasar y luego algunas nuevas.</p>
      ${lista.map((_, k) => htmlTarjeta(k, null, true)).join("")}
      <div id="fin"></div>`,
-    "#/"
+    "#/evaluaciones"
   );
+  iniciarSesion(false);
 }
 
 // ---------- Pantalla: modo examen ----------
@@ -683,6 +966,7 @@ async function vistaExamen(ambito, cantidad, conReloj) {
     "#/examen"
   );
   $app.classList.add("modo-examen");
+  iniciarSesion(true);
   vistaExamen.datos = { titulo, ambito, lista };
   if (conReloj) {
     let segundos = lista.length * 90;
@@ -712,12 +996,14 @@ function respondidaEnExamen(k) {
 function contarExamen() {
   const c = document.getElementById("contador");
   if (c) c.textContent = `Respondidas ${enPantalla.filter((_, k) => respondidaEnExamen(k)).length} de ${enPantalla.length}`;
+  if (sesion?.examen) actualizarMapa();
 }
 
 async function entregarExamen() {
   if (modo !== "examen") return;
   clearInterval(relojExamen);
   modo = "revision";
+  salirSesion();
   $app.classList.remove("modo-examen");
   let puntos = 0;
   const fallados = new Map();
@@ -997,19 +1283,15 @@ function vistaAyuda() {
   poner(
     "Cómo usar Finlay",
     `<ol class="ayuda">
-      <li><b>Elige un año</b> y añade tus asignaturas.</li>
-      <li>Entra en una asignatura y pulsa <b>＋ Cargar conferencias</b> o <b>＋ Cargar libros</b>. Elige los archivos que bajaste del aula virtual (PDF, Word .docx o PowerPoint .pptx).</li>
-      <li>Finlay lee el texto <b>dentro de tu teléfono</b>: no sube nada a internet.</li>
-      <li>Un libro que se usa en varias asignaturas (como Guyton) se carga una sola vez. En las demás asignaturas usa <b>📚 Usar un libro que ya cargaste</b>.</li>
-      <li><b>Busca</b> en una asignatura, en un año o en toda la carrera. Cada resultado dice de qué libro o conferencia sale y en qué página.</li>
-      <li>Pulsa <b>🔊</b> para escuchar. Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</li>
-      <li><b>📤 Exportar texto</b> crea un archivo pequeño con el texto de una conferencia para enviárselo a Claude y que te haga el resumen y el cuestionario.</li>
-      <li><b>📥 Cargar paquete de Claude</b> añade las conferencias con su resumen y su cuestionario.</li>
-      <li><b>🧠 Repaso del día</b>: preguntas elegidas para hoy. Las que fallas vuelven mañana; las que aciertas, cada vez más tarde (repaso espaciado).</li>
-      <li><b>📝 Examen</b>: preguntas al azar con cronómetro y nota de 2 a 5.</li>
-      <li><b>📅 Plan</b>: pon la fecha de tu examen y Finlay reparte los temas por día, empezando por los más flojos.</li>
-      <li><b>🎧 Escuchar todos los resúmenes</b> (dentro de cada asignatura): como un programa de radio.</li>
-      <li><b>💾 Copia</b>: guarda todo para no perderlo, o comparte con tus compañeros por Zapya, Bluetooth o WhatsApp.</li>
+      <li><b>Inicio:</b> tu racha 🔥, la meta del día, el botón <b>Repasar hoy</b>, tu próximo examen y tus asignaturas con su progreso.</li>
+      <li><b>Temas:</b> elige el año y la asignatura. Cada tema tiene <b>Resumen</b>, <b>Cuestionario</b> y la conferencia <b>Completa</b>. Aquí está también el buscador.</li>
+      <li><b>Cuestionarios:</b> una pregunta por pantalla. Responde y toca <b>Siguiente</b>. Si fallas, <b>📖 Ver dónde está</b> te lleva a la parte exacta de la conferencia, marcada en verde.</li>
+      <li><b>Progreso:</b> tus días seguidos, lo que respondiste esta semana, cuánto dominas cada asignatura y tus insignias.</li>
+      <li><b>Evaluaciones:</b> el <b>repaso del día</b> (lo que fallas vuelve pronto), el <b>examen de práctica</b> con nota de 2 a 5 y el <b>plan para el examen</b>.</li>
+      <li><b>Perfil:</b> tu nombre, apariencia (clara u oscura), tamaño de letra, meta diaria, voz y la <b>copia de seguridad</b>.</li>
+      <li><b>Menú ☰</b> (arriba a la derecha): buscar, todos los materiales, cargar paquete y más.</li>
+      <li>Para cargar tus propios archivos, entra en una asignatura y toca <b>＋ Cargar</b>. Finlay lee el texto dentro del teléfono, sin subir nada.</li>
+      <li>Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</li>
     </ol>
     <p class="nota">Meta diaria de preguntas:
       <select id="meta">${[5, 10, 15, 20, 30, 50].map((v) => `<option value="${v}" ${v === metaDiaria() ? "selected" : ""}>${v}</option>`).join("")}</select></p>
@@ -1185,6 +1467,20 @@ document.addEventListener("click", async (ev) => {
     const enunciado = p.tipo === "completar" ? p.pregunta.replace(/_{3,}/g, ", espacio en blanco, ") : p.pregunta;
     const extra = p.tipo === "vf" && p.afirmaciones ? p.afirmaciones.map((a) => a.texto).join(". ") + ". " : "";
     voz.leer(`${enunciado}. ${extra}${textoRespuesta(p)} ${p.explicacion || ""}`, velocidadVoz());
+  } else if (accion === "volver") {
+    const d = b.dataset.destino;
+    if (d === "historial") history.back();
+    else if (d) location.hash = d;
+  } else if (accion === "ses-sig") {
+    mostrarPregunta(sesion.actual + 1);
+  } else if (accion === "ses-ant") {
+    mostrarPregunta(sesion.actual - 1);
+  } else if (accion === "ses-ir") {
+    mostrarPregunta(Number(b.dataset.i));
+  } else if (accion === "menu") {
+    abrirMenu();
+  } else if (accion === "cerrar-menu") {
+    if (ev.target === b) cerrarMenu();
   } else if (accion === "ampliar") {
     if (b.src) ampliar(b.src);
   } else if (accion === "cerrar-lupa") {
@@ -1257,6 +1553,19 @@ $paquete.addEventListener("change", async () => {
 document.addEventListener("input", () => modo === "examen" && contarExamen());
 document.addEventListener("change", (ev) => {
   if (modo === "examen") contarExamen();
+  if (ev.target.id === "aj-nombre") {
+    guardarPref("nombre", ev.target.value.trim());
+    aviso("Nombre guardado");
+  }
+  if (ev.target.id === "aj-tema") {
+    guardarPref("tema", ev.target.value);
+    if (ev.target.value) document.documentElement.dataset.tema = ev.target.value;
+    else delete document.documentElement.dataset.tema;
+  }
+  if (ev.target.id === "aj-escala") {
+    guardarPref("escala", ev.target.value === "1" ? "" : ev.target.value);
+    document.documentElement.style.setProperty("--escala", ev.target.value);
+  }
   if (ev.target.id === "semestre-asig") {
     const id = decodeURIComponent(location.hash.split("/")[2]);
     db.cambiarSemestre(id, leerSemestre(ev.target.value)).then(() => aviso("Semestre guardado"));
@@ -1277,11 +1586,6 @@ $archivo.addEventListener("change", () => {
   if ($archivo.files.length && destinoCarga) cargarArchivos([...$archivo.files], destinoCarga.asig, destinoCarga.tipo);
 });
 
-$atras.addEventListener("click", () => {
-  const d = $atras.dataset.destino;
-  if (d === "historial") history.back();
-  else if (d) location.hash = d;
-});
 
 // Botón flotante para detener la voz
 const $detener = document.getElementById("detener-voz");
@@ -1317,8 +1621,15 @@ async function router() {
   const [ruta, consulta = ""] = location.hash.slice(1).split("?");
   const partes = ruta.split("/").filter(Boolean).map(decodeURIComponent);
   const q = new URLSearchParams(consulta).get("q") || "";
+  cerrarMenu();
+  sesion = null;
+  pintarNav(partes[0] || "");
   try {
-    if (partes[0] === "anio") await vistaAnio(Number(partes[1]));
+    if (partes[0] === "temas") await vistaTemas();
+    else if (partes[0] === "progreso") await vistaProgresoGeneral();
+    else if (partes[0] === "evaluaciones") await vistaEvaluaciones();
+    else if (partes[0] === "perfil") await vistaPerfil();
+    else if (partes[0] === "anio") await vistaAnio(Number(partes[1]));
     else if (partes[0] === "asig") await vistaAsignatura(partes[1], partes[2]);
     else if (partes[0] === "buscar") await vistaBuscar(partes[1], q);
     else if (partes[0] === "leer") await vistaLeer(partes[1], Number(partes[2]), q);

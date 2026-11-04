@@ -3,20 +3,33 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Finlay</title>
+  <title>Finlay · Estudio médico</title>
   <meta name="description" content="Estudia Medicina con tus libros y conferencias, con la fuente citada.">
-  <meta name="theme-color" content="#0f6e6e">
+  <meta name="theme-color" content="#dff0ee">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" href="iconos/icono.svg" type="image/svg+xml">
+  <link rel="icon" href="iconos/icono-192.png" type="image/png">
   <link rel="apple-touch-icon" href="iconos/icono-192.png">
   <link rel="stylesheet" href="estilos.css">
+  <script>
+    // Tema y tamaño de letra elegidos en Perfil (antes de pintar, para que no parpadee)
+    try {
+      var t = localStorage.getItem("finlay.tema"); if (t) document.documentElement.dataset.tema = t;
+      var e = localStorage.getItem("finlay.escala"); if (e) document.documentElement.style.setProperty("--escala", e);
+    } catch (x) {}
+  </script>
 </head>
 <body>
-  <header class="barra">
-    <button id="atras" class="atras" aria-label="Atrás" hidden>‹</button>
+  <header id="cabecera" class="barra">
+    <button id="atras" class="atras" aria-label="Atrás" hidden></button>
     <h1 id="titulo">Finlay</h1>
   </header>
   <main id="app"><p class="vacio">Cargando…</p></main>
+
+  <nav id="nav" class="nav-inferior" aria-label="Secciones"></nav>
+
+  <div id="menu" class="menu-fondo" data-accion="cerrar-menu" hidden>
+    <aside class="menu-panel" role="dialog" aria-label="Menú"></aside>
+  </div>
 
   <input id="archivo" type="file" multiple hidden>
   <input id="paquete" type="file" hidden>

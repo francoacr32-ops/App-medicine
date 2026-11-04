@@ -1,16 +1,29 @@
 {
-  "name": "Finlay — Estudio de Medicina",
+  "name": "Finlay · Estudio médico",
   "short_name": "Finlay",
   "description": "Estudia Medicina con tus libros y conferencias, con la fuente citada.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#f4f7f7",
-  "theme_color": "#0f6e6e",
+  "background_color": "#eef6f5",
+  "theme_color": "#dff0ee",
   "icons": [
-    { "src": "iconos/icono-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "iconos/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "iconos/icono-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "iconos/icono-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "iconos/icono-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
