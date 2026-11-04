@@ -158,8 +158,8 @@ async function vistaInicio() {
         <label class="bienvenida-nombre" for="aj-nombre">¿Cómo te llamas?
           <input id="aj-nombre" value="${esc(nombre)}" maxlength="30" placeholder="Escribe tu nombre" autocomplete="given-name">
         </label>
-        <button class="btn btn-repasar" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
-        <a class="btn secundario" href="#/temas">Explorar los temas</a>
+        <button class="btn btn-repasar solo-manual" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
+        <a class="btn secundario btn-explorar" href="#/temas">Explorar los temas</a>
         <p class="nota">En honor a Carlos J. Finlay, el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p>
       </section>`);
   }
@@ -242,7 +242,7 @@ async function vistaTemas() {
     </form>
     <h2>Elige un año</h2>
     <div class="rejilla">${tarjetas}</div>
-    <button class="btn ancho" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>
+    <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>
     <p class="nota centro">${docs.length} materiales cargados · <a href="#/biblioteca">Ver todos</a></p>`);
 }
 
@@ -319,7 +319,7 @@ async function vistaPerfil() {
   poner("Perfil", `
     <section class="tarjeta perfil-cabeza">
       <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.4</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.4.1</span><span class="sub">${docs.length} materiales${espacio}</span></div>
     </section>
     <h2>Tus datos</h2>
     <div class="tarjeta ajustes">
@@ -336,7 +336,7 @@ async function vistaPerfil() {
     <a class="tarjeta fila-tarjeta" href="#/copia"><span class="icono-caja">${ico("copia")}</span>
       <span class="asig-cuerpo"><span class="asig-nombre">Copia y compartir</span><span class="sub">Guarda tu progreso o pásalo por Zapya</span></span>${ico("chevron", "flecha-der")}</a>
     <button class="tarjeta fila-tarjeta boton-fila" data-accion="paquete"><span class="icono-caja">${ico("cargar")}</span>
-      <span class="asig-cuerpo"><span class="asig-nombre">Cargar paquete de Claude</span><span class="sub">Conferencias, resúmenes y cuestionarios</span></span>${ico("chevron", "flecha-der")}</button>
+      <span class="asig-cuerpo"><span class="asig-nombre">Cargar paquete de Claude</span><span class="sub">Conferencias y cuestionarios nuevos</span></span>${ico("chevron", "flecha-der")}</button>
     <a class="tarjeta fila-tarjeta" href="#/ayuda"><span class="icono-caja">${ico("ayuda")}</span>
       <span class="asig-cuerpo"><span class="asig-nombre">Cómo usar Finlay</span><span class="sub">Guía rápida</span></span>${ico("chevron", "flecha-der")}</a>
     <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
@@ -420,8 +420,8 @@ async function vistaAnio(anio) {
   poner(
     ANIOS[anio - 1],
     `${secciones || `<p class="vacio">Todavía no hay asignaturas en ${ANIOS[anio - 1]}.</p>`}
-     <h2>Añadir asignatura</h2>
-     <form class="nueva-asig" data-anio="${anio}">
+     <h2 class="solo-manual">Añadir asignatura</h2>
+     <form class="nueva-asig solo-manual" data-anio="${anio}">
        <input name="nombre" placeholder="Nombre (ej. Morfofisiología)" required maxlength="80">
        ${selectorSemestre("semestre", 1)}
        <button class="btn">＋ Añadir</button>
@@ -448,7 +448,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
         <a href="#/doc/${d.id}" class="doc-nombre">${icono(d)} ${esc(d.nombre)}</a>
         <span class="sub">${d.paginas ? `${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}` : "sin texto completo"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
         ${d.cuestionario || d.diapositivas || d.pdf ? `<span class="etiquetas">${d.diapositivas || d.pdf ? '<span class="chip">🖼️ Diapositivas</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
-        <span class="acciones">
+        <span class="acciones solo-manual">
           <button class="btn mini" data-accion="exportar" data-id="${d.id}">📤 Exportar texto</button>
           <button class="btn mini peligro" data-accion="quitar" data-id="${d.id}">Quitar</button>
         </span></li>`
@@ -473,7 +473,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
        <a href="${enlaceAsig(id)}/progreso">Progreso</a>
      </nav>
      <ul class="docs">${items || `<li class="vacio">No hay ${tipo === "libro" ? "libros" : "conferencias"} todavía.</li>`}</ul>
-     <button class="btn ancho" data-accion="cargar" data-asig="${esc(id)}" data-tipo="${tipo}">
+     <button class="btn ancho solo-manual" data-accion="cargar" data-asig="${esc(id)}" data-tipo="${tipo}">
        ＋ Cargar ${tipo === "libro" ? "libros" : "conferencias"} (PDF, Word, PowerPoint)</button>
      ${otrosLibros.length ? `<details class="compartir"><summary>📚 Usar un libro que ya cargaste en otra asignatura</summary>
         <ul>${otrosLibros.map((d) => `<li><button class="btn mini" data-accion="vincular" data-id="${d.id}" data-asig="${esc(id)}">＋</button> ${esc(d.nombre)}</li>`).join("")}</ul>
@@ -636,7 +636,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
   poner(
     doc.nombre,
     `<p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>${pestanas}${cuerpo}
-     ${pestana === "conferencia" && doc.paginas ? `<button class="btn mini abajo" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>` : ""}`,
+     ${pestana === "conferencia" && doc.paginas ? `<button class="btn mini abajo solo-manual" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>` : ""}`,
     enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
   );
   vistaDoc.doc = doc;

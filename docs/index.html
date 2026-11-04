@@ -14,6 +14,7 @@
     // Tema y tamaño de letra elegidos en Perfil (antes de pintar, para que no parpadee)
     try {
       var t = localStorage.getItem("finlay.tema"); if (t) document.documentElement.dataset.tema = t;
+      if (window.FinlayAndroid) document.documentElement.classList.add("app-completa");
       var e = localStorage.getItem("finlay.escala"); if (e) document.documentElement.style.setProperty("--escala", e);
     } catch (x) {}
   </script>
