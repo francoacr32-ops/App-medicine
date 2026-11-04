@@ -495,3 +495,7 @@ h2.semestre .sub { font-weight: 400; }
 .sesion-mapa button.respondida { background: var(--fondo-2); border-color: var(--acento-2); color: var(--acento); }
 .sesion-mapa button.actual { outline: 3px solid var(--naranja); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { .sesion-nav .btn.listo { animation: none; } }
+.bienvenida-nombre { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 360px; font-weight: 700; text-align: left; }
+.pedir-nombre { margin-bottom: 14px; gap: 8px; }
+.pedir-nombre label { font-weight: 600; }
+.pedir-nombre .buscador { margin: 0; }

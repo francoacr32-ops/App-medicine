@@ -154,6 +154,9 @@ async function vistaInicio() {
         <img src="iconos/cruz.webp" alt="" class="bienvenida-cruz">
         <h2 class="hola">¡Bienvenido${nombre ? ", " + esc(nombre) : ""} a Finlay!</h2>
         <p>Tu app para estudiar Medicina con tus conferencias, libros y clases taller, sin internet.</p>
+        <label class="bienvenida-nombre" for="aj-nombre">¿Cómo te llamas?
+          <input id="aj-nombre" value="${esc(nombre)}" maxlength="30" placeholder="Escribe tu nombre" autocomplete="given-name">
+        </label>
         <button class="btn btn-repasar" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
         <a class="btn secundario" href="#/temas">Explorar los temas</a>
         <p class="nota">En honor a Carlos J. Finlay, el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p>
@@ -195,7 +198,12 @@ async function vistaInicio() {
   const tarjetas = [];
   for (const a of asigs) tarjetas.push(htmlTarjetaAsignatura(a, await progresoAsignatura(a)));
 
+  const pedirNombre = nombre ? "" : `<form class="tarjeta pedir-nombre" data-form="nombre">
+      <label for="aj-nombre">¿Cómo te llamas? Así te saludo al entrar.</label>
+      <div class="buscador"><input id="aj-nombre" maxlength="30" placeholder="Tu nombre" autocomplete="given-name" required>
+      <button class="btn">Guardar</button></div></form>`;
   poner(null, `
+    ${pedirNombre}
     <section class="saludo">
       <div class="saludo-izq">
         <h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""}</h2>
@@ -1399,6 +1407,9 @@ document.addEventListener("submit", async (ev) => {
   if (f.classList.contains("buscador")) {
     const q = f.q.value.trim();
     if (q) location.hash = `#/buscar/${encodeURIComponent(f.dataset.ambito)}?q=${encodeURIComponent(q)}`;
+  } else if (f.dataset.form === "nombre") {
+    guardarPref("nombre", f.querySelector("input").value.trim());
+    router();
   } else if (f.classList.contains("form-examen")) {
     location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}`;
   } else if (f.classList.contains("form-plan")) {
