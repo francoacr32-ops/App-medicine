@@ -1,6 +1,6 @@
 // Permite abrir Finlay sin conexión y ahorra datos: los archivos se guardan en el teléfono.
 
-const VERSION = "finlay-v18";
+const VERSION = "finlay-v19";
 const BASICOS = [
   "./",
   "index.html",
@@ -15,11 +15,12 @@ const BASICOS = [
   "iconos/asig/celula.webp",
   "iconos/asig/cirugia.webp",
   "iconos/asig/comunidad.webp",
+  "iconos/asig/cts.webp",
   "iconos/asig/genetica.webp",
   "iconos/asig/ginecologia.webp",
   "iconos/asig/medicina-interna.webp",
   "iconos/asig/metabolismo.webp",
-  "iconos/asig/mgi-5.webp",
+  "iconos/asig/mgi-6.webp",
   "iconos/asig/mgi.webp",
   "iconos/asig/microbiologia.webp",
   "iconos/asig/nervioso.webp",
@@ -28,6 +29,7 @@ const BASICOS = [
   "iconos/asig/pediatria.webp",
   "iconos/asig/propedeutica.webp",
   "iconos/asig/psicologia.webp",
+  "iconos/asig/salud-publica.webp",
   "iconos/asig/sangre.webp",
   "js/app.js",
   "js/db.js",
