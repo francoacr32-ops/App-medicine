@@ -25,17 +25,33 @@ export function guardarPref(clave, valor) {
 
 // ---------- Imagen de cada asignatura ----------
 const sinTildes = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-export function imagenAsignatura(nombre) {
-  const n = sinTildes(nombre);
-  if (n.includes("celula") || n.includes("histolog") || n.includes("tejido")) return "iconos/asig-celula.webp";
-  if (n.includes("molecular") || n.includes("bioquim") || n.includes("genetic") || n.includes("metabol")) return "iconos/asig-adn.webp";
-  if (n.includes("ontogenia") || n.includes("embrio") || n.includes("desarrollo")) return "iconos/asig-embrion.webp";
-  return null;
+// Ícono de cada asignatura (del plan de estudio de Medicina, de 1ro a 6to año)
+const ICONOS_ASIG = [
+  ["ontogenia", "ontogenia"], ["embrio", "ontogenia"],
+  ["celula", "celula"], ["tejido", "celula"], ["histolog", "celula"],
+  ["molecular", "biologia-molecular"], ["bioquim", "biologia-molecular"],
+  ["nervioso", "nervioso"], ["endocrino", "nervioso"],
+  ["metabol", "metabolismo"], ["nutric", "metabolismo"],
+  ["sangre", "sangre"], ["inmun", "sangre"],
+  ["cardiovascular", "cardiovascular"], ["respirat", "cardiovascular"], ["digestiv", "cardiovascular"], ["renal", "cardiovascular"],
+  ["psicolog", "psicologia"], ["genetic", "genetica"], ["microbiolog", "microbiologia"], ["parasitolog", "microbiologia"],
+  ["propedeutica", "propedeutica"], ["semiolog", "propedeutica"], ["medicina interna", "medicina-interna"],
+  ["pediatr", "pediatria"], ["ginecolog", "ginecologia"], ["obstetric", "ginecologia"], ["cirug", "cirugia"],
+  ["oftalmolog", "oftalmologia"], ["comunidad", "comunidad"], ["salud publica", "salud-publica"],
+  ["ciencia, tecnologia", "cts"], ["tecnologia y sociedad", "cts"],
+  ["medicina general integral", "mgi"], ["mgi", "mgi"],
+];
+export function imagenAsignatura(nombre, anio) {
+  const n = sinTildes(nombre).toLowerCase();
+  const par = ICONOS_ASIG.find(([clave]) => n.includes(clave));
+  if (!par) return null;
+  const icono = par[1] === "mgi" && Number(anio) === 6 ? "mgi-6" : par[1];
+  return `iconos/asig/${icono}.webp`;
 }
-export function htmlMiniatura(nombre) {
-  const img = imagenAsignatura(nombre);
+export function htmlMiniatura(nombre, anio) {
+  const img = imagenAsignatura(nombre, anio);
   return img
-    ? `<img class="miniatura" src="${img}" alt="" loading="lazy">`
+    ? `<img class="miniatura miniatura-dibujo" src="${img}" alt="" loading="lazy">`
     : `<span class="miniatura miniatura-icono">${ico("libro")}</span>`;
 }
 

@@ -576,3 +576,6 @@ main > h2::before, .panel > h2::before {
 :root[data-tema="oscuro"] .tarjeta.anio { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 10%, var(--tarjeta)), var(--tarjeta)); }
 :root[data-tema="oscuro"] .anio-check { color: #032125; }
 :root[data-tema="oscuro"] .diapo img { filter: brightness(.92); }
+
+/* Dibujos de las asignaturas: fondo blanco también en el diseño oscuro */
+.miniatura-dibujo { width: 64px; height: 64px; object-fit: contain; background: #fff; padding: 4px; border-radius: 16px; }

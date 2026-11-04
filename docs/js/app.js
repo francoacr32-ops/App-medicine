@@ -135,7 +135,7 @@ async function progresoAsignatura(asig) {
 
 function htmlTarjetaAsignatura(a, p) {
   return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">
-    ${htmlMiniatura(a.nombre)}
+    ${htmlMiniatura(a.nombre, a.anio)}
     <span class="asig-cuerpo">
       <span class="asig-nombre">${esc(a.nombre)}</span>
       ${p.total
@@ -234,10 +234,11 @@ async function vistaTemas() {
   const docs = await db.listarDocumentos();
   const tarjetas = ANIOS.map((nombre, i) => {
     const n = asigs.filter((a) => a.anio === i + 1).length;
+    const conMateriales = docs.some((d) => d.asignaturas.some((x) => x.startsWith(`${i + 1}|`)));
     const [icono, color] = ESTILO_ANIO[i];
-    return `<a class="tarjeta anio${n ? " con-asig" : ""}" style="--c:${color}" href="#/anio/${i + 1}">
+    return `<a class="tarjeta anio${conMateriales ? " con-asig" : ""}" style="--c:${color}" href="#/anio/${i + 1}">
       <span class="anio-ico">${ico(icono)}</span>
-      ${n ? `<span class="anio-check">${ico("check")}</span>` : ""}
+      ${conMateriales ? `<span class="anio-check">${ico("check")}</span>` : ""}
       <span class="anio-pie"><span><span class="grande">${esc(nombre)}</span>
         <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></span>
         <span class="anio-flecha">${ico("chevron")}</span></span></a>`;
@@ -270,7 +271,7 @@ async function vistaProgresoGeneral() {
   const filas = [];
   for (const a of asigs) {
     const p = await progresoAsignatura(a);
-    filas.push(`<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}/progreso">${htmlMiniatura(a.nombre)}
+    filas.push(`<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}/progreso">${htmlMiniatura(a.nombre, a.anio)}
       <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
       <span class="asig-barra"><span class="barra-progreso"><span class="en-camino" style="width:${p.pct}%"></span></span><b>${p.pct}%</b></span>
       <span class="sub">${p.bien} de ${p.total} preguntas dominadas</span></span>${ico("chevron", "flecha-der")}</a>`);
@@ -326,7 +327,7 @@ async function vistaPerfil() {
   poner("Perfil", `
     <section class="tarjeta perfil-cabeza">
       <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.5</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.6</span><span class="sub">${docs.length} materiales${espacio}</span></div>
     </section>
     <h2>Tus datos</h2>
     <div class="tarjeta ajustes">
@@ -423,7 +424,7 @@ const SEMESTRES = [
   [1, "1er semestre"],
   [2, "2do semestre"],
   [0, "Anual (todo el curso)"],
-  [null, "Sin semestre indicado"],
+  [null, "Asignaturas"],
 ];
 
 function selectorSemestre(nombre, valor, id = "") {
@@ -441,9 +442,10 @@ async function vistaAnio(anio) {
     const c = docs.filter((d) => d.tipo !== "libro").length;
     const l = docs.length - c;
     const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
-    return `<a class="tarjeta fila" href="${enlaceAsig(a.id)}">
-      <span class="grande">${esc(a.nombre)}</span>
-      <span class="sub">${c} conferencias y talleres · ${l} libros${preguntas ? ` · ${preguntas} preguntas` : ""}</span></a>`;
+    return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
+      <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
+      <span class="sub">${c || l ? `${c} conferencias y talleres${l ? ` · ${l} libros` : ""}${preguntas ? ` · ${preguntas} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
+      ${ico("chevron", "flecha-der")}</a>`;
   };
   let secciones = "";
   for (const [valor, titulo] of SEMESTRES) {
