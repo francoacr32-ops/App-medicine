@@ -25,7 +25,7 @@ export function guardarPref(clave, valor) {
 
 // ---------- Imagen de cada asignatura ----------
 const sinTildes = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-// Ícono de cada asignatura (del plan de estudio de Medicina, de 1ro a 6to año)
+// Ícono de cada asignatura (del plan de estudio de Medicina, de 1ro a 5to año)
 const ICONOS_ASIG = [
   ["ontogenia", "ontogenia"], ["embrio", "ontogenia"],
   ["celula", "celula"], ["tejido", "celula"], ["histolog", "celula"],
@@ -37,15 +37,14 @@ const ICONOS_ASIG = [
   ["psicolog", "psicologia"], ["genetic", "genetica"], ["microbiolog", "microbiologia"], ["parasitolog", "microbiologia"],
   ["propedeutica", "propedeutica"], ["semiolog", "propedeutica"], ["medicina interna", "medicina-interna"],
   ["pediatr", "pediatria"], ["ginecolog", "ginecologia"], ["obstetric", "ginecologia"], ["cirug", "cirugia"],
-  ["oftalmolog", "oftalmologia"], ["comunidad", "comunidad"], ["salud publica", "salud-publica"],
-  ["ciencia, tecnologia", "cts"], ["tecnologia y sociedad", "cts"],
+  ["oftalmolog", "oftalmologia"], ["comunidad", "comunidad"],
   ["medicina general integral", "mgi"], ["mgi", "mgi"],
 ];
 export function imagenAsignatura(nombre, anio) {
   const n = sinTildes(nombre).toLowerCase();
   const par = ICONOS_ASIG.find(([clave]) => n.includes(clave));
   if (!par) return null;
-  const icono = par[1] === "mgi" && Number(anio) === 6 ? "mgi-6" : par[1];
+  const icono = par[1] === "mgi" && Number(anio) === 5 ? "mgi-5" : par[1];
   return `iconos/asig/${icono}.webp`;
 }
 export function htmlMiniatura(nombre, anio) {

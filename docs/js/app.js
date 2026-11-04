@@ -327,7 +327,7 @@ async function vistaPerfil() {
   poner("Perfil", `
     <section class="tarjeta perfil-cabeza">
       <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.6</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.7</span><span class="sub">${docs.length} materiales${espacio}</span></div>
     </section>
     <h2>Tus datos</h2>
     <div class="tarjeta ajustes">
