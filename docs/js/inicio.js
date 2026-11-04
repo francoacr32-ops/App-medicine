@@ -117,3 +117,73 @@ export function insignias({ racha, totalRespondidas, temasDominados, mejorNota }
     { id: "n5", t: "Excelente", d: "Saca 5 en un examen", ok: mejorNota >= 5, e: "🏆" },
   ];
 }
+
+// ---------- Anillo grande de porcentaje (progreso general) ----------
+export function htmlAnilloPct(pct, texto = "") {
+  const r = 44;
+  const c = 2 * Math.PI * r;
+  return `<div class="anillo anillo-pct" role="img" aria-label="${pct}% ${esc(texto)}">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="50" cy="50" r="${r}" class="anillo-fondo"/>
+      <circle cx="50" cy="50" r="${r}" class="anillo-valor" stroke-dasharray="${c.toFixed(1)}"
+        stroke-dashoffset="${(c * (1 - Math.min(100, pct) / 100)).toFixed(1)}"/>
+    </svg>
+    <div class="anillo-texto"><b>${pct}%</b>${texto ? `<span>${esc(texto)}</span>` : ""}</div>
+  </div>`;
+}
+
+// ---------- Tiempo de estudio (minutos con la app abierta y en uso) ----------
+let ultimaActividad = Date.now();
+function leerTiempo() {
+  try { return JSON.parse(localStorage.getItem("finlay.tiempo") || "{}"); } catch { return {}; }
+}
+export function iniciarContadorDeTiempo(hoy) {
+  for (const e of ["pointerdown", "keydown", "scroll", "touchstart"])
+    addEventListener(e, () => (ultimaActividad = Date.now()), { passive: true, capture: true });
+  setInterval(() => {
+    if (document.hidden || Date.now() - ultimaActividad > 120000) return; // sin usarla 2 min: no cuenta
+    const t = leerTiempo();
+    const f = hoy();
+    t[f] = (t[f] || 0) + 30;
+    const fechas = Object.keys(t).sort();
+    while (fechas.length > 90) delete t[fechas.shift()];
+    try { localStorage.setItem("finlay.tiempo", JSON.stringify(t)); } catch {}
+  }, 30000);
+}
+/** Segundos estudiados: en total y por día */
+export function tiempoDeEstudio() {
+  const t = leerTiempo();
+  return { total: Object.values(t).reduce((s, x) => s + x, 0), porDia: t };
+}
+export function textoTiempo(seg) {
+  const h = Math.floor(seg / 3600);
+  const m = Math.round((seg % 3600) / 60);
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${m} min`;
+}
+
+// ---------- Favoritos (conferencias guardadas) ----------
+export function favoritos() {
+  try { return JSON.parse(localStorage.getItem("finlay.favoritos") || "[]"); } catch { return []; }
+}
+export function esFavorito(id) {
+  return favoritos().includes(id);
+}
+export function alternarFavorito(id) {
+  const f = favoritos();
+  const i = f.indexOf(id);
+  if (i >= 0) f.splice(i, 1); else f.unshift(id);
+  try { localStorage.setItem("finlay.favoritos", JSON.stringify(f)); } catch {}
+  return i < 0;
+}
+
+// ---------- Puntos y nivel (salen de lo que de verdad has estudiado) ----------
+const NIVELES = ["Principiante", "Estudiante", "Estudiante aplicado", "Estudiante constante", "Estudiante avanzado",
+  "Estudiante destacado", "Casi residente", "Residente", "Especialista", "Profesor"];
+export function puntosYNivel({ correctas, temasDominados, examenes, racha }) {
+  const puntos = correctas * 10 + temasDominados * 50 + examenes * 20 + racha * 5;
+  const n = Math.min(NIVELES.length, 1 + Math.floor(puntos / 500));
+  return { puntos, nivel: n, nombreNivel: NIVELES[n - 1], faltan: n < NIVELES.length ? n * 500 - puntos : 0 };
+}
+export function textoPuntos(p) {
+  return p >= 1000 ? (p / 1000).toFixed(1).replace(".0", "") + "k" : String(p);
+}

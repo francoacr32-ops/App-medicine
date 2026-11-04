@@ -35,7 +35,7 @@ export function htmlOpciones(p, i) {
   switch (p.tipo) {
     case "multiple":
       return p.opciones
-        .map((o, j) => `<button class="opcion" data-accion="responder" data-i="${i}" data-r="${j}">${LETRAS[j]}) ${esc(o)}</button>`)
+        .map((o, j) => `<button class="opcion" data-accion="responder" data-i="${i}" data-r="${j}"><span class="letra">${LETRAS[j].toUpperCase()}</span><span>${esc(o)}</span></button>`)
         .join("");
     case "vf":
       if (!esLista(p))
@@ -58,7 +58,7 @@ export function htmlOpciones(p, i) {
         p.opciones
           .map(
             (o, j) => `<label class="opcion marca" data-j="${j}">
-              <input type="checkbox" value="${j}"> <span>${LETRAS[j]}) ${esc(o)}</span></label>`
+              <input type="checkbox" value="${j}"> <span class="letra">${LETRAS[j].toUpperCase()}</span><span>${esc(o)}</span></label>`
           )
           .join("") + comprobar
       );
@@ -96,9 +96,9 @@ const igual = (a, b) => normalizar(a).replace(/\s+/g, " ").trim() === normalizar
 export function textoRespuesta(p) {
   switch (p.tipo) {
     case "multiple":
-      return `La respuesta correcta es ${LETRAS[p.correcta]}) ${p.opciones[p.correcta]}.`;
+      return `La respuesta correcta es ${LETRAS[p.correcta].toUpperCase()}) ${p.opciones[p.correcta]}.`;
     case "marcar":
-      return "Las correctas son: " + p.correctas.map((j) => `${LETRAS[j]}) ${p.opciones[j]}`).join("; ") + ".";
+      return "Las correctas son: " + p.correctas.map((j) => `${LETRAS[j].toUpperCase()}) ${p.opciones[j]}`).join("; ") + ".";
     case "vf":
       if (!esLista(p)) return `Es ${p.respuesta ? "verdadero" : "falso"}.`;
       return p.afirmaciones.map((a, j) => `${LETRAS[j]}) ${a.respuesta ? "V" : "F"}`).join(", ") + ".";

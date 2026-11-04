@@ -35,6 +35,12 @@ const TRAZOS = {
   sol: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   luna: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
   reloj: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  lapiz: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  corazon: '<path d="M12 20s-7.5-4.6-9.3-9.2C1.5 7.5 3.6 4 7 4c2 0 3.5 1.2 5 3 1.5-1.8 3-3 5-3 3.4 0 5.5 3.5 4.3 6.8C19.5 15.4 12 20 12 20z"/>',
+  camara: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  lupa: '<circle cx="10" cy="10" r="6.5"/><path d="m20 20-5.2-5.2M7.5 10h5M10 7.5v5"/>',
+  biblioteca: '<path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="m16 5 3.8-1 3 15.5-3.8 1z"/>',
+  marcador: '<path d="M6 3h12v18l-6-4.5L6 21z"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
 };
 

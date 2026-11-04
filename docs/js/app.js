@@ -10,7 +10,7 @@ import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esI
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
-import { pref, guardarPref, htmlMiniatura, htmlAnillo, htmlPulso, htmlSemana, insignias } from "./inicio.js";
+import { pref, guardarPref, htmlMiniatura, imagenAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, puntosYNivel, textoPuntos } from "./inicio.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -78,9 +78,10 @@ function cita(doc, etiqueta, pagina) {
 function poner(titulo, html, atras = null) {
   if (titulo === null) {
     $cabecera.className = "barra marca";
-    $cabecera.innerHTML = `<img class="marca-retrato" src="iconos/retrato-finlay.webp" alt="Carlos J. Finlay">
-      <div class="marca-texto"><span class="marca-nombre">Finlay</span><span class="marca-sub">ESTUDIO MÉDICO</span></div>
-      <button class="btn-icono" data-accion="menu" aria-label="Menú">${ico("menu")}</button>`;
+    $cabecera.innerHTML = `<a href="#/perfil" class="marca-foto">${htmlAvatar("marca-retrato")}</a>
+      <div class="marca-texto"><span class="marca-nombre">Finlay</span><span class="marca-sub">Estudio Médico</span>
+        <span class="marca-estado"><i></i>Funciona sin internet</span></div>
+      <a class="btn-icono" href="#/ajustes" aria-label="Configuración">${ico("ajustes")}</a>`;
   } else {
     $cabecera.className = "barra";
     $cabecera.innerHTML = `${atras ? `<button class="atras" data-accion="volver" data-destino="${esc(atras)}" aria-label="Atrás">${ico("atras")}</button>` : ""}
@@ -133,6 +134,37 @@ async function progresoAsignatura(asig) {
   return { docs, total, bien, pct: total ? Math.round((bien / total) * 100) : 0 };
 }
 
+/** Foto del estudiante (si la puso) o el retrato de Finlay */
+function htmlAvatar(clase, conInicial = false) {
+  const foto = pref("foto");
+  if (foto) return `<img class="${clase}" src="${foto}" alt="Tu foto">`;
+  const n = pref("nombre").trim();
+  if (conInicial && n) return `<span class="${clase} avatar-inicial">${esc(n[0].toUpperCase())}</span>`;
+  return `<img class="${clase}" src="iconos/retrato-finlay.webp" alt="Carlos J. Finlay">`;
+}
+
+/** Datos del progreso de todo lo estudiado (se usan en Inicio, Progreso y Perfil) */
+async function resumenDeEstudio() {
+  const docs = await db.listarDocumentos();
+  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
+  const respuestas = await db.todasLasRespuestas();
+  const ids = new Set(conPreguntas.map((d) => d.id));
+  const totalPreguntas = conPreguntas.reduce((s, d) => s + d.cuestionario.length, 0);
+  const dominadas = respuestas.filter((r) => r.ultima && ids.has(r.docId)).length;
+  const diario = await db.listarDiario();
+  const { racha, hoy } = calcularRacha(diario);
+  const examenes = await db.listarExamenes();
+  let temasDominados = 0;
+  for (const d of conPreguntas) if ((await estadoDe(d)).estado === "dominado") temasDominados++;
+  const correctas = diario.reduce((s, d) => s + d.correctas, 0);
+  const respondidas = diario.reduce((s, d) => s + d.preguntas, 0);
+  return {
+    docs, conPreguntas, respuestas, diario, racha, hoy, examenes, temasDominados, correctas, respondidas,
+    pct: totalPreguntas ? Math.round((dominadas / totalPreguntas) * 100) : 0,
+    nivel: puntosYNivel({ correctas, temasDominados, examenes: examenes.length, racha }),
+  };
+}
+
 function htmlTarjetaAsignatura(a, p) {
   return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">
     ${htmlMiniatura(a.nombre, a.anio)}
@@ -163,38 +195,43 @@ async function vistaInicio() {
         <p class="nota">En honor a Carlos J. Finlay, el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p>
       </section>`);
   }
-  const { racha, hoy: deHoy } = calcularRacha(await db.listarDiario());
+  const r = await resumenDeEstudio();
   const meta = metaDiaria();
-  const conPreguntas = docs.filter((d) => d.cuestionario?.length);
-  const { lista } = preguntasDelRepaso(conPreguntas, await db.todasLasRespuestas(), meta);
+  const { lista } = preguntasDelRepaso(r.conPreguntas, r.respuestas, meta);
 
-  // Examen más cercano
-  let plan = "";
+  // "Continuar estudiando": la última conferencia abierta, o el repaso, o los temas
+  const docUltimo = pref("ultimo") && docs.find((d) => d.id === pref("ultimo"));
+  const continuar = docUltimo ? `#/doc/${docUltimo.id}` : lista.length ? "#/repaso" : "#/temas";
+
+  // Hoy en tu plan
+  const plan = [];
+  if (lista.length) {
+    const docRep = lista[0].doc || docs.find((d) => d.id === lista[0].docId);
+    const [anio, nombreA] = (docRep?.asignaturas[0] || "|").split("|");
+    plan.push(`<a class="tarjeta plan-tarjeta" href="#/repaso">${htmlMiniatura(nombreA || "", anio)}
+      <span class="asig-cuerpo"><span class="asig-nombre">Repaso del día</span>
+      <span class="sub">${lista.length} preguntas · unos ${Math.max(1, Math.round(lista.length * 0.6))} min</span></span>
+      <span class="flecha-circulo">${ico("chevron")}</span></a>`);
+  }
   const planes = (await db.listarPlanes()).filter((p) => diasHasta(p.fecha) >= 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
   if (planes.length) {
     const p = planes[0];
     const dias = repartirPlan(p.fecha, await temasConEstado(p.asignatura));
     const deHoyPlan = dias.find((d) => d.fecha === db.hoy());
     const que = deHoyPlan?.repasoGeneral ? "Repaso general" : deHoyPlan?.temas.map((t) => t.doc.nombre.split(" - ")[0]).join(" · ");
-    plan = `<a class="tarjeta fila-tarjeta" href="#/plan/${p.id}">
-      <span class="icono-caja naranja">${ico("calendario")}</span>
+    const [anioP, nombreP] = p.asignatura.split("|");
+    plan.push(`<a class="tarjeta plan-tarjeta" href="#/plan/${p.id}">${htmlMiniatura(nombreP, anioP)}
       <span class="asig-cuerpo"><span class="asig-nombre">${esc(p.nombre)} · <b class="texto-naranja">${textoDias(diasHasta(p.fecha))}</b></span>
-      <span class="sub">${esc(p.asignatura.split("|")[1])}${que ? " · Hoy: " + esc(que) : ""}</span></span>
-      ${ico("chevron", "flecha-der")}</a>`;
+      <span class="sub">${que ? "Hoy: " + esc(que) : esc(nombreP)}</span></span>
+      <span class="flecha-circulo">${ico("chevron")}</span></a>`);
   }
+  const pctMeta = Math.min(100, Math.round((r.hoy.preguntas / meta) * 100));
+  plan.push(`<a class="tarjeta plan-tarjeta" href="${lista.length ? "#/repaso" : "#/examen"}">
+      <span class="icono-caja">${ico("trofeo")}</span>
+      <span class="asig-cuerpo"><span class="asig-nombre">Meta de hoy: ${r.hoy.preguntas} de ${meta} preguntas</span>
+      <span class="barra-progreso"><span class="en-camino" style="width:${pctMeta}%"></span></span></span>
+      <span class="flecha-circulo">${ico("chevron")}</span></a>`);
 
-  // Continuar donde lo dejaste
-  let continuar = "";
-  const ultimo = pref("ultimo");
-  const docUltimo = ultimo && docs.find((d) => d.id === ultimo);
-  if (docUltimo) {
-    continuar = `<a class="tarjeta fila-tarjeta" href="#/doc/${docUltimo.id}">
-      <span class="icono-caja">${ico("play")}</span>
-      <span class="asig-cuerpo"><span class="sub">Continuar donde lo dejaste</span>
-      <span class="asig-nombre">${esc(docUltimo.nombre)}</span></span>${ico("chevron", "flecha-der")}</a>`;
-  }
-
-  // Asignaturas con materiales
   const asigs = (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id)));
   const tarjetas = [];
   for (const a of asigs) tarjetas.push(htmlTarjetaAsignatura(a, await progresoAsignatura(a)));
@@ -205,22 +242,24 @@ async function vistaInicio() {
       <button class="btn">Guardar</button></div></form>`;
   poner(null, `
     ${pedirNombre}
-    <section class="saludo">
-      <div class="saludo-izq">
-        <h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""}</h2>
-        <p class="animo">${deHoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p>
-        ${htmlPulso}
-      </div>
-      <div class="saludo-der">
-        <span class="pastilla-racha">${ico("llama")}<b>${racha}</b> día${racha === 1 ? "" : "s"} seguido${racha === 1 ? "" : "s"}</span>
-        ${htmlAnillo(deHoy.preguntas, meta)}
-      </div>
+    <section class="saludo2">
+      <h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""} <span class="mano">👋</span></h2>
+      <p class="animo">${r.hoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p>
     </section>
-    ${lista.length
-      ? `<a class="btn btn-repasar" href="#/repaso">${ico("playc")}<span>Repasar hoy</span><span class="contador">${lista.length}</span>${ico("chevron")}</a>`
-      : `<a class="btn btn-repasar" href="#/examen">${ico("check")}<span>¡Al día! Hacer un examen</span>${ico("chevron")}</a>`}
-    ${plan}
-    ${continuar}
+    <a class="tarjeta progreso-general" href="#/progreso">
+      <span class="pg-titulo">Tu progreso general</span>
+      <span class="pg-fila">${htmlAnilloPct(r.pct, "dominado")}
+        <span class="pg-datos">
+          <span><b>${docs.length}</b><span>Temas</span></span>
+          <span><b>${r.examenes.length}</b><span>Evaluaciones</span></span>
+          <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
+        </span></span>
+    </a>
+    <a class="btn btn-grande" href="${continuar}"><span>Continuar estudiando
+      ${docUltimo ? `<small>${esc(docUltimo.nombre)}</small>` : ""}</span>${ico("chevron")}</a>
+    <div class="titulo-seccion"><h2>Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
+    ${plan.join("")}
+    <div class="titulo-seccion"><h2>Tus asignaturas</h2><a href="#/temas">Ver todas ${ico("chevron")}</a></div>
     <div class="lista-asig">${tarjetas.join("")}</div>
   `);
 }
@@ -229,67 +268,101 @@ async function vistaInicio() {
 // Ícono y color de cada año (como en el diseño)
 const ESTILO_ANIO = [["birrete", "#12b5c2"], ["libro", "#2f7ff0"], ["matraz", "#9b4fe0"],
   ["estetoscopio", "#13bfa0"], ["microscopio", "#f2962e"], ["adn", "#e5408f"]];
-async function vistaTemas() {
+async function vistaTemas(filtro) {
+  if (filtro === undefined) filtro = pref("filtroAnio", "todas");
+  else guardarPref("filtroAnio", filtro === "todas" ? "" : filtro);
   const asigs = await db.listarAsignaturas();
   const docs = await db.listarDocumentos();
-  const tarjetas = ANIOS.map((nombre, i) => {
-    const n = asigs.filter((a) => a.anio === i + 1).length;
-    const conMateriales = docs.some((d) => d.asignaturas.some((x) => x.startsWith(`${i + 1}|`)));
-    const [icono, color] = ESTILO_ANIO[i];
-    return `<a class="tarjeta anio${conMateriales ? " con-asig" : ""}" style="--c:${color}" href="#/anio/${i + 1}">
-      <span class="anio-ico">${ico(icono)}</span>
-      ${conMateriales ? `<span class="anio-check">${ico("check")}</span>` : ""}
-      <span class="anio-pie"><span><span class="grande">${esc(nombre)}</span>
-        <span class="sub">${n ? `${n} asignatura${n > 1 ? "s" : ""}` : "Vacío"}</span></span>
-        <span class="anio-flecha">${ico("chevron")}</span></span></a>`;
-  }).join("");
+  const chips = [["todas", "Todas"], ...ANIOS.map((n, i) => [String(i + 1), n])]
+    .map(([v, t]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="#/temas/${v}">${t}</a>`).join("");
+  const elegidas = asigs
+    .filter((a) => filtro === "todas" || a.anio === Number(filtro))
+    .sort((a, b) => a.anio - b.anio || (a.semestre ?? 9) - (b.semestre ?? 9) || a.nombre.localeCompare(b.nombre, "es"));
+  let lista = "";
+  let anioActual = 0;
+  for (const a of elegidas) {
+    if (filtro === "todas" && a.anio !== anioActual) {
+      anioActual = a.anio;
+      lista += `<div class="titulo-seccion"><h2>${ANIOS[a.anio - 1]}</h2><a href="#/anio/${a.anio}">Ver año ${ico("chevron")}</a></div>`;
+    }
+    const suyos = docs.filter((d) => d.asignaturas.includes(a.id));
+    const c = suyos.filter((d) => d.tipo !== "libro").length;
+    const preg = suyos.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
+    lista += `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
+      <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
+      <span class="sub">${suyos.length ? `${c} conferencias y talleres${preg ? ` · ${preg} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
+      ${ico("chevron", "flecha-der")}</a>`;
+  }
   poner("Temas", `
     <form class="buscador" data-ambito="todo">
       <input name="q" type="search" placeholder="Buscar en toda la carrera…" autocomplete="off" required>
       <button class="btn" aria-label="Buscar">${ico("buscar")}</button>
     </form>
-    <h2>Elige un año</h2>
-    <div class="rejilla">${tarjetas}</div>
-    <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>
-    <p class="nota centro">${docs.length} materiales cargados · <a href="#/biblioteca">Ver todos</a></p>`);
+    <nav class="filtros" aria-label="Filtrar por año">${chips}</nav>
+    ${lista || `<p class="vacio">Todavía no hay asignaturas en este año.</p>`}
+    <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>`);
+  document.querySelector(".chip-filtro.activo")?.scrollIntoView({ inline: "center", block: "nearest" });
 }
 
 // ---------- Pantalla: Progreso (estadísticas e insignias) ----------
-async function vistaProgresoGeneral() {
-  const diario = await db.listarDiario();
-  const { racha } = calcularRacha(diario);
-  const respuestas = await db.todasLasRespuestas();
-  const totalRespondidas = diario.reduce((s, d) => s + d.preguntas, 0);
-  const totalBien = diario.reduce((s, d) => s + d.correctas, 0);
-  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
-  let temasDominados = 0;
-  for (const d of docs) if ((await estadoDe(d)).estado === "dominado") temasDominados++;
-  const examenes = await db.listarExamenes();
-  const mejorNota = examenes.reduce((m, e) => Math.max(m, e.nota), 0);
-  const lista = insignias({ racha, totalRespondidas, temasDominados, mejorNota });
-  const asigs = (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id)));
-  const filas = [];
-  for (const a of asigs) {
-    const p = await progresoAsignatura(a);
-    filas.push(`<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}/progreso">${htmlMiniatura(a.nombre, a.anio)}
-      <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
-      <span class="asig-barra"><span class="barra-progreso"><span class="en-camino" style="width:${p.pct}%"></span></span><b>${p.pct}%</b></span>
-      <span class="sub">${p.bien} de ${p.total} preguntas dominadas</span></span>${ico("chevron", "flecha-der")}</a>`);
+async function vistaProgresoGeneral(pestana = "estadisticas") {
+  const r = await resumenDeEstudio();
+  const lista = insignias({ racha: r.racha, totalRespondidas: r.respondidas, temasDominados: r.temasDominados,
+    mejorNota: r.examenes.reduce((m, e) => Math.max(m, e.nota), 0) });
+  const tiempo = tiempoDeEstudio();
+  const pestanas = `<nav class="pestanas-pildora">
+    <a href="#/progreso" class="${pestana === "estadisticas" ? "activa" : ""}">Estadísticas</a>
+    <a href="#/progreso/logros" class="${pestana === "logros" ? "activa" : ""}">Logros</a></nav>`;
+  if (pestana === "logros") {
+    return poner("Mi progreso", `${pestanas}
+      <div class="tarjeta nivel-grande">${ico("trofeo")}<span><b>Nivel ${r.nivel.nivel}</b> · ${esc(r.nivel.nombreNivel)}
+        <span class="sub">${r.nivel.puntos} puntos${r.nivel.faltan ? ` · te faltan ${r.nivel.faltan} para el siguiente nivel` : ""}</span></span></div>
+      <h2>Insignias · ${lista.filter((x) => x.ok).length} de ${lista.length}</h2>
+      <div class="insignias">${lista.map((x) => `<div class="insignia ${x.ok ? "ganada" : ""}" title="${esc(x.d)}">
+        <span class="insignia-emoji">${x.e}</span><b>${esc(x.t)}</b><span class="sub">${esc(x.d)}</span></div>`).join("")}</div>
+      <p class="nota centro">Ganas puntos al acertar preguntas (10), dominar un tema (50), hacer exámenes (20) y estudiar días seguidos (5).</p>`, "#/perfil");
   }
-  poner("Progreso", `
+  // Áreas más fuertes: porcentaje dominado de cada asignatura
+  const asigs = (await db.listarAsignaturas()).filter((a) => r.conPreguntas.some((d) => d.asignaturas.includes(a.id)));
+  const areas = [];
+  for (const a of asigs) areas.push({ a, p: await progresoAsignatura(a) });
+  areas.sort((x, y) => y.p.pct - x.p.pct);
+  const colores = ["#2dd4cf", "#a3e635", "#c084fc", "#f2962e", "#e5408f", "#2f7ff0"];
+  // Actividad de los últimos 7 días (preguntas respondidas y minutos)
+  const dias = [];
+  const base = new Date(db.hoy() + "T12:00:00");
+  for (let k = 6; k >= 0; k--) {
+    const d = new Date(base); d.setDate(d.getDate() - k);
+    const f = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const reg = r.diario.find((x) => x.fecha === f);
+    dias.push({ f, n: reg?.preguntas || 0, min: Math.round((tiempo.porDia[f] || 0) / 60),
+      letra: d.toLocaleDateString("es", { weekday: "short" }).replace(".", "") });
+  }
+  const max = Math.max(5, ...dias.map((d) => d.n + d.min));
+  poner("Mi progreso", `${pestanas}
+    <section class="tarjeta progreso-general sin-enlace">
+      <span class="pg-fila">${htmlAnilloPct(r.pct, "Progreso total")}
+        <span class="pg-datos">
+          <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
+          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Estudio total</span></span>
+          <span>${ico("trofeo")}<b>${lista.filter((x) => x.ok).length}</b><span>Logros</span></span>
+        </span></span>
+    </section>
+    <div class="titulo-seccion"><h2>Tu actividad</h2><span class="sub">Últimos 7 días</span></div>
+    <div class="tarjeta actividad">${dias.map((d) => `<div class="act-dia ${d.f === db.hoy() ? "hoy" : ""}" title="${d.n} preguntas · ${d.min} min">
+        <span class="act-barra" style="height:${Math.max(4, Math.round(((d.n + d.min) / max) * 100))}%"></span>
+        <span class="act-letra">${esc(d.letra)}</span></div>`).join("")}</div>
+    <p class="nota centro">Altura = preguntas respondidas + minutos de estudio.</p>
+    <h2>Áreas más fuertes</h2>
+    <div class="tarjeta areas">${areas.length ? areas.map(({ a, p }, i) => `<a class="area" href="${enlaceAsig(a.id)}/progreso">
+        <span class="area-nombre">${esc(a.nombre)}</span>
+        <span class="area-barra"><span style="width:${p.pct}%;background:${colores[i % colores.length]}"></span></span><b>${p.pct}%</b></a>`).join("")
+      : `<p class="vacio">Cuando respondas cuestionarios, aquí verás en qué asignaturas vas mejor.</p>`}</div>
     <div class="cifras">
-      <div class="tarjeta cifra">${ico("llama", "texto-naranja")}<b>${racha}</b><span>días seguidos</span></div>
-      <div class="tarjeta cifra">${ico("check")}<b>${totalRespondidas}</b><span>respondidas</span></div>
-      <div class="tarjeta cifra">${ico("trofeo")}<b>${totalRespondidas ? Math.round((totalBien / totalRespondidas) * 100) : 0}%</b><span>de aciertos</span></div>
-    </div>
-    <h2>Esta semana</h2>
-    <div class="tarjeta">${htmlSemana(diario, db.hoy())}</div>
-    <h2>Por asignatura</h2>
-    ${filas.join("") || `<p class="vacio">Cuando respondas cuestionarios, aquí verás tu avance.</p>`}
-    <h2>Insignias · ${lista.filter((x) => x.ok).length} de ${lista.length}</h2>
-    <div class="insignias">${lista.map((x) => `<div class="insignia ${x.ok ? "ganada" : ""}" title="${esc(x.d)}">
-      <span class="insignia-emoji">${x.e}</span><b>${esc(x.t)}</b><span class="sub">${esc(x.d)}</span></div>`).join("")}</div>
-    <p class="nota centro">${respuestas.length} preguntas distintas practicadas.</p>`);
+      <div class="tarjeta cifra">${ico("check")}<b>${r.respondidas}</b><span>respondidas</span></div>
+      <div class="tarjeta cifra">${ico("trofeo")}<b>${r.respondidas ? Math.round((r.correctas / r.respondidas) * 100) : 0}%</b><span>de aciertos</span></div>
+      <div class="tarjeta cifra">${ico("examen")}<b>${r.examenes.length}</b><span>exámenes</span></div>
+    </div>`, "#/perfil");
 }
 
 // ---------- Pantalla: Evaluaciones (repaso, examen y plan) ----------
@@ -315,6 +388,36 @@ async function vistaEvaluaciones() {
 
 // ---------- Pantalla: Perfil (nombre y ajustes) ----------
 async function vistaPerfil() {
+  const r = await resumenDeEstudio();
+  const nombre = pref("nombre").trim();
+  const fila = (href, icono, texto, extra = "") =>
+    `<a class="menu-fila" href="${href}">${ico(icono)}<span>${texto}</span>${extra}${ico("chevron", "flecha-der")}</a>`;
+  poner("Perfil", `
+    <section class="perfil-arriba">
+      <label class="perfil-avatar" title="Cambiar foto">${htmlAvatar("avatar-grande", true)}
+        <span class="avatar-lapiz">${ico("lapiz")}</span>
+        <input type="file" id="aj-foto" accept="image/*" hidden></label>
+      <b class="perfil-nombre">${esc(nombre || "Estudiante")}</b>
+      <span class="sub">Estudiante de Medicina</span>
+    </section>
+    <div class="perfil-cifras">
+      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">⭐</span><span><b>Nivel ${r.nivel.nivel}</b><span class="sub">${esc(r.nivel.nombreNivel)}</span></span></a>
+      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">💎</span><span><b>${textoPuntos(r.nivel.puntos)}</b><span class="sub">Puntos</span></span></a>
+    </div>
+    <nav class="tarjeta menu-lista">
+      ${fila("#/progreso", "grafica", "Mi progreso")}
+      ${fila("#/biblioteca/favoritos", "corazon", "Mis favoritos", favoritos().length ? `<span class="globo">${favoritos().length}</span>` : "")}
+      ${fila("#/copia", "copia", "Copia y compartir")}
+      ${fila("#/planes", "calendario", "Plan para el examen")}
+      ${fila("#/ajustes", "ajustes", "Configuración")}
+      ${fila("#/ayuda", "ayuda", "Ayuda: cómo usar Finlay")}
+    </nav>
+    <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
+    <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`);
+  mostrarBotonInstalar();
+}
+
+async function vistaAjustes() {
   const docs = await db.listarDocumentos();
   let espacio = "";
   if (navigator.storage?.estimate) {
@@ -324,32 +427,57 @@ async function vistaPerfil() {
     } catch {}
   }
   const opcion = (v, t, actual) => `<option value="${v}" ${String(v) === String(actual) ? "selected" : ""}>${t}</option>`;
-  poner("Perfil", `
-    <section class="tarjeta perfil-cabeza">
-      <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.7</span><span class="sub">${docs.length} materiales${espacio}</span></div>
-    </section>
-    <h2>Tus datos</h2>
-    <div class="tarjeta ajustes">
-      <label for="aj-nombre">Tu nombre<input id="aj-nombre" value="${esc(pref("nombre"))}" maxlength="30" placeholder="Para saludarte en el inicio"></label>
+  const tema = pref("tema", "hora");
+  const interruptor = (id, icono, texto, encendido, sub = "") => `<label class="fila-interruptor" for="${id}">${ico(icono)}
+      <span>${texto}${sub ? `<span class="sub">${sub}</span>` : ""}</span>
+      <input type="checkbox" role="switch" id="${id}" ${encendido ? "checked" : ""}><span class="interruptor"></span></label>`;
+  poner("Configuración", `
+    <h2>Cuenta</h2>
+    <div class="tarjeta menu-lista">
+      <label class="menu-fila cuenta" for="aj-nombre">${htmlAvatar("avatar-chico", true)}
+        <span><input id="aj-nombre" value="${esc(pref("nombre"))}" maxlength="30" placeholder="Escribe tu nombre"><span class="sub">Toca para cambiar tu nombre</span></span></label>
+      <label class="menu-fila" for="aj-foto">${ico("camara")}<span>${pref("foto") ? "Cambiar foto" : "Poner tu foto"}</span>${ico("chevron", "flecha-der")}
+        <input type="file" id="aj-foto" accept="image/*" hidden></label>
+      ${pref("foto") ? `<button class="menu-fila" data-accion="quitar-foto">${ico("cerrar")}<span>Quitar la foto</span></button>` : ""}
     </div>
-    <h2>Ajustes</h2>
-    <div class="tarjeta ajustes">
-      <label for="aj-tema">Apariencia<select id="aj-tema">${opcion("hora", "Automática por la hora (clara de día, oscura de noche)", pref("tema", "hora"))}${opcion("claro", "Clara", pref("tema", "hora"))}${opcion("oscuro", "Oscura", pref("tema", "hora"))}${opcion("telefono", "Igual que el teléfono", pref("tema", "hora"))}</select></label>
-      <label for="aj-escala">Tamaño de letra<select id="aj-escala">${opcion("1", "Normal", pref("escala", "1"))}${opcion("1.12", "Grande", pref("escala", "1"))}${opcion("1.25", "Muy grande", pref("escala", "1"))}</select></label>
-      <label for="meta">Meta diaria de preguntas<select id="meta">${[5, 10, 15, 20, 30, 50, 60].map((v) => opcion(v, v, metaDiaria())).join("")}</select></label>
-      <label for="velocidad">Velocidad de la voz<select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => opcion(v, v + "×", velocidadVoz())).join("")}</select></label>
+    <h2>Preferencias</h2>
+    <div class="tarjeta menu-lista">
+      ${interruptor("aj-auto", "reloj", "Cambiar color según la hora", tema === "hora", "Claro de día, oscuro de 7 pm a 7 am")}
+      ${interruptor("aj-oscuro", "luna", "Modo oscuro", temaReal() === "oscuro", tema === "hora" ? "Ahora lo decide la hora" : "")}
+      ${interruptor("aj-sonido", "voz", "Sonido al responder", pref("sonido", "1") === "1", "Un tono al acertar o fallar")}
+      <label class="fila-select" for="aj-escala">${ico("lupa")}<span>Tamaño de letra</span><select id="aj-escala">${opcion("1", "Normal", pref("escala", "1"))}${opcion("1.12", "Grande", pref("escala", "1"))}${opcion("1.25", "Muy grande", pref("escala", "1"))}</select></label>
+      <label class="fila-select" for="meta">${ico("trofeo")}<span>Meta diaria de preguntas</span><select id="meta">${[5, 10, 15, 20, 30, 50, 60].map((v) => opcion(v, v, metaDiaria())).join("")}</select></label>
+      <label class="fila-select" for="velocidad">${ico("voz")}<span>Velocidad de la voz</span><select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => opcion(v, v + "×", velocidadVoz())).join("")}</select></label>
     </div>
     <h2>Tus materiales</h2>
-    <a class="tarjeta fila-tarjeta" href="#/copia"><span class="icono-caja">${ico("copia")}</span>
-      <span class="asig-cuerpo"><span class="asig-nombre">Copia y compartir</span><span class="sub">Guarda tu progreso o pásalo por Zapya</span></span>${ico("chevron", "flecha-der")}</a>
-    <button class="tarjeta fila-tarjeta boton-fila" data-accion="paquete"><span class="icono-caja">${ico("cargar")}</span>
-      <span class="asig-cuerpo"><span class="asig-nombre">Cargar paquete de Claude</span><span class="sub">Conferencias y cuestionarios nuevos</span></span>${ico("chevron", "flecha-der")}</button>
-    <a class="tarjeta fila-tarjeta" href="#/ayuda"><span class="icono-caja">${ico("ayuda")}</span>
-      <span class="asig-cuerpo"><span class="asig-nombre">Cómo usar Finlay</span><span class="sub">Guía rápida</span></span>${ico("chevron", "flecha-der")}</a>
-    <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
-    <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`);
-  mostrarBotonInstalar();
+    <div class="tarjeta menu-lista">
+      <a class="menu-fila" href="#/copia">${ico("copia")}<span>Copia y compartir</span>${ico("chevron", "flecha-der")}</a>
+      <button class="menu-fila solo-manual" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron", "flecha-der")}</button>
+    </div>
+    <h2>Información</h2>
+    <div class="tarjeta menu-lista">
+      <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
+        <p>Finlay · Estudio médico · versión 1.8 · ${docs.length} materiales${espacio}.</p>
+        <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
+      <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
+        <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
+    </div>`, "#/perfil");
+}
+
+/** Guarda la foto del estudiante, reducida a 256 px para que ocupe poco */
+async function guardarFoto(archivo) {
+  try {
+    const img = await createImageBitmap(archivo);
+    const lado = Math.min(img.width, img.height);
+    const lienzo = document.createElement("canvas");
+    lienzo.width = lienzo.height = 256;
+    lienzo.getContext("2d").drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, 256, 256);
+    guardarPref("foto", lienzo.toDataURL("image/jpeg", 0.85));
+    aviso("📷 Foto guardada");
+    router();
+  } catch {
+    alert("No se pudo abrir esa imagen. Prueba con otra foto.");
+  }
 }
 
 // ---------- Menú ☰ ----------
@@ -402,15 +530,15 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", aplicarT
 const PESTANAS = [
   ["inicio", "#/", "Inicio", "inicio"],
   ["temas", "#/temas", "Temas", "estudiar"],
-  ["progreso", "#/progreso", "Progreso", "grafica"],
+  ["biblioteca", "#/biblioteca", "Biblioteca", "biblioteca"],
   ["evaluaciones", "#/evaluaciones", "Evaluaciones", "examen"],
   ["perfil", "#/perfil", "Perfil", "yo"],
 ];
 const SECCION_DE_RUTA = {
-  "": "inicio", temas: "temas", anio: "temas", asig: "temas", doc: "temas", leer: "temas", buscar: "temas", biblioteca: "temas",
-  progreso: "progreso",
+  "": "inicio", temas: "temas", anio: "temas", asig: "temas", buscar: "temas",
+  biblioteca: "biblioteca", doc: "biblioteca", leer: "biblioteca",
   evaluaciones: "evaluaciones", repaso: "evaluaciones", examen: "evaluaciones", "examen-hacer": "evaluaciones", planes: "evaluaciones", plan: "evaluaciones",
-  perfil: "perfil", copia: "perfil", ayuda: "perfil",
+  perfil: "perfil", progreso: "perfil", copia: "perfil", ayuda: "perfil", ajustes: "perfil",
 };
 function pintarNav(ruta) {
   const activa = SECCION_DE_RUTA[ruta] || "inicio";
@@ -641,7 +769,10 @@ async function vistaDoc(docId, pestana, irA = 0) {
     // Diapositivas con su formato original, una debajo de otra como en un lector de PDF
     const total = totalPaginas(doc);
     const palabra = doc.etiqueta === "diap." || doc.diapositivas ? "Diapositiva" : "Página";
-    cuerpo = `<p class="sub diapo-info">${total} ${palabra === "Diapositiva" ? "diapositivas" : "páginas"} · toca una para ampliarla</p>
+    cuerpo = `<div class="avance-diapo" data-total="${total}" data-doc="${doc.id}">
+        <span class="barra-progreso"><span class="en-camino" id="avance-barra" style="width:${(100 / total).toFixed(1)}%"></span></span>
+        <span id="avance-num">1 / ${total}</span></div>
+      <p class="sub diapo-info">${total} ${palabra === "Diapositiva" ? "diapositivas" : "páginas"} · toca una para ampliarla</p>
       <div class="diapos">${Array.from({ length: total }, (_, k) => k + 1).map((n) => `
         <figure class="diapo" id="d${n}">
           <img data-diapo="${n}" alt="${palabra} ${n}" data-accion="ampliar" width="960" height="720">
@@ -672,15 +803,61 @@ async function vistaDoc(docId, pestana, irA = 0) {
 
   poner(
     doc.nombre,
-    `<p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>${pestanas}${cuerpo}
+    `<div class="doc-cabeza"><p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>
+      <button class="btn-fav ${esFavorito(doc.id) ? "activo" : ""}" data-accion="favorito" data-id="${doc.id}" aria-pressed="${esFavorito(doc.id)}" aria-label="Guardar en favoritos">${ico("corazon")}</button></div>${pestanas}${cuerpo}
      ${pestana === "conferencia" && doc.paginas ? `<button class="btn mini abajo solo-manual" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>` : ""}`,
     enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
   );
   vistaDoc.doc = doc;
   if (pestana === "cuestionario") iniciarSesion(false);
   else if (tieneVisual(doc)) activarCarga($app, doc);
-  if (irA) document.getElementById("d" + irA)?.scrollIntoView({ block: "start" });
+  // Vuelve a la diapositiva donde se quedó (si no se pidió otra)
+  if (!irA && pestana === "conferencia") irA = Number(pref("pos-" + docId)) || 0;
+  if (irA > 1) document.getElementById("d" + irA)?.scrollIntoView({ block: "start" });
+  actualizarAvance();
 }
+
+/** Tono corto al responder: dos notas que suben si aciertas, una grave si fallas */
+let audio = null;
+function sonar(bien) {
+  if (pref("sonido", "1") !== "1") return;
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    const notas = bien ? [660, 880] : [220];
+    notas.forEach((f, i) => {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      const t = audio.currentTime + i * 0.12;
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (bien ? 0.18 : 0.3));
+      o.connect(g).connect(audio.destination);
+      o.start(t);
+      o.stop(t + 0.35);
+    });
+  } catch {}
+}
+
+/** Barra de avance de la conferencia: qué diapositiva estás viendo y dónde te quedaste */
+let esperaAvance = null;
+function actualizarAvance() {
+  const caja = document.querySelector(".avance-diapo");
+  if (!caja) return;
+  const total = Number(caja.dataset.total);
+  const tope = caja.getBoundingClientRect().bottom + 20;
+  let actual = 1;
+  for (const f of document.querySelectorAll(".diapo")) {
+    if (f.getBoundingClientRect().top <= tope) actual = Number(f.id.slice(1)) || actual;
+    else break;
+  }
+  document.getElementById("avance-num").textContent = `${actual} / ${total}`;
+  document.getElementById("avance-barra").style.width = `${((actual / total) * 100).toFixed(1)}%`;
+  clearTimeout(esperaAvance);
+  esperaAvance = setTimeout(() => guardarPref("pos-" + caja.dataset.doc, actual > 1 ? String(actual) : ""), 400);
+}
+addEventListener("scroll", () => requestAnimationFrame(actualizarAvance), { passive: true });
 
 // ---------- Motor de preguntas (sirve para el cuestionario, el repaso y el examen) ----------
 let enPantalla = []; // posición en pantalla → { doc, i }
@@ -705,9 +882,11 @@ function mostrarCorreccion(k, r, sinResponder = false) {
   const { doc, i } = enPantalla[k];
   const p = doc.cuestionario[i];
   const parcial = r.total > 1 ? ` (${r.aciertos} de ${r.total} bien)` : "";
-  const titulo = sinResponder ? "⚪ Sin responder." : r.correcta ? "✅ ¡Correcto!" : `❌ Incorrecto${parcial}.`;
+  const titulo = sinResponder ? "⚪ Sin responder." : r.correcta ? `${ico("check", "ok-ico")} ¡Correcto!` : `❌ Incorrecto${parcial}.`;
   const caja = document.querySelector(`#p${k} .explicacion`);
-  caja.innerHTML = `<b>${titulo}</b> ${esc(textoRespuesta(p))}
+  caja.classList.toggle("es-correcta", !!r.correcta && !sinResponder);
+  caja.classList.toggle("es-incorrecta", !r.correcta && !sinResponder);
+  caja.innerHTML = `<b class="correccion-titulo">${titulo}</b> <span class="correccion-texto">${esc(textoRespuesta(p))}</span>
     ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
     ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
     <div class="acciones">
@@ -808,6 +987,7 @@ async function responder(k, valor) {
   }
   const r = corregir(p, tarjeta, valor);
   if (!r) return aviso("Responde todas las partes antes de comprobar.");
+  sonar(r.correcta);
   preguntaRespondida();
   if (p.tipo !== "abierta") mostrarCorreccion(k, r);
   else if (!r.correcta) tarjeta.querySelector(".explicacion .acciones")?.insertAdjacentHTML("afterbegin", botonGuia(k));
@@ -837,13 +1017,16 @@ function verRespuesta(k) {
 // ---------- Una pregunta por pantalla (cuestionario, repaso y examen) ----------
 let sesion = null;
 
+let relojSesion = null;
 function iniciarSesion(examen = false) {
   const tarjetas = [...$app.querySelectorAll(".pregunta")];
   sesion = null;
   if (tarjetas.length < 2) return;
   const barra = document.createElement("div");
   barra.className = "sesion-barra";
-  barra.innerHTML = `<span id="ses-pos"></span><span class="barra-progreso"><span class="en-camino" id="ses-avance"></span></span>`;
+  barra.innerHTML = `<div class="ses-arriba"><span id="ses-pos" class="pildora"></span>
+    ${examen ? "" : `<span class="ses-reloj">${ico("reloj")}<span id="ses-reloj">00:00</span></span>`}</div>
+    <span class="barra-progreso"><span class="en-camino" id="ses-avance"></span></span>`;
   tarjetas[0].before(barra);
   const nav = document.createElement("div");
   nav.className = "sesion-nav";
@@ -857,6 +1040,16 @@ function iniciarSesion(examen = false) {
     nav.after(mapa);
   }
   sesion = { tarjetas, actual: 0, examen };
+  clearInterval(relojSesion);
+  if (!examen) {
+    const inicio = Date.now();
+    relojSesion = setInterval(() => {
+      const el = document.getElementById("ses-reloj");
+      if (!el) return clearInterval(relojSesion);
+      const seg = Math.floor((Date.now() - inicio) / 1000);
+      el.textContent = `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
+    }, 1000);
+  }
   mostrarPregunta(0, false);
 }
 
@@ -1374,34 +1567,53 @@ async function vistaProgreso(asig, docs) {
 }
 
 // ---------- Pantalla: todos los materiales ----------
-async function vistaBiblioteca() {
-  const docs = (await db.listarDocumentos()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
-  poner(
-    "Todos los materiales",
-    docs.length
-      ? `<ul class="docs">${docs
-          .map(
-            (d) => `<li class="doc"><a class="doc-nombre" href="#/doc/${d.id}">${icono(d)} ${esc(d.nombre)}</a>
-            <span class="sub">${esc(d.asignaturas.map(nombreAsig).join(" · "))}</span></li>`
-          )
-          .join("")}</ul>`
-      : `<p class="vacio">Todavía no has cargado materiales.</p>`,
-    "#/"
-  );
+async function vistaBiblioteca(filtro = "todo") {
+  const todos = (await db.listarDocumentos()).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
+  const favs = favoritos();
+  const FILTROS = [["todo", "Todo"], ["conferencia", "Conferencias"], ["taller", "Clases taller"], ["libro", "Libros"], ["favoritos", "❤ Favoritos"]];
+  const docs = todos.filter((d) => filtro === "todo" || (filtro === "favoritos" ? favs.includes(d.id) : (d.tipo || "conferencia") === filtro));
+  if (filtro === "favoritos") docs.sort((a, b) => favs.indexOf(a.id) - favs.indexOf(b.id));
+  poner("Biblioteca médica", `
+    <form class="buscador" data-ambito="todo">
+      <input name="q" type="search" placeholder="Buscar en todos los materiales…" autocomplete="off" required>
+      <button class="btn" aria-label="Buscar">${ico("buscar")}</button>
+    </form>
+    <nav class="filtros">${FILTROS.map(([v, t]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="#/biblioteca/${v}">${t}</a>`).join("")}</nav>
+    ${docs.length ? `<div class="biblio">${docs.map((d) => {
+      const [anio, nombreA] = d.asignaturas[0].split("|");
+      const portada = imagenAsignatura(nombreA, anio);
+      return `<a class="biblio-tarjeta" href="#/doc/${d.id}">
+        <span class="biblio-portada">${tieneVisual(d)
+          ? `<img data-portada="${d.id}" alt="" ${portada ? `src="${portada}"` : ""}>`
+          : portada ? `<img src="${portada}" alt="">` : `<span class="biblio-icono">${ico(d.tipo === "libro" ? "libro" : "conferencia")}</span>`}
+          ${favs.includes(d.id) ? `<span class="biblio-fav">${ico("corazon")}</span>` : ""}
+          ${d.cuestionario?.length ? `<span class="biblio-preg">${d.cuestionario.length} ❓</span>` : ""}</span>
+        <b>${esc(d.nombre)}</b><span class="sub">${esc(nombreA)}</span></a>`;
+    }).join("")}</div>`
+    : `<p class="vacio">${filtro === "favoritos" ? "Todavía no tienes favoritos. Abre una conferencia y toca ❤ para guardarla aquí." : "No hay materiales de este tipo todavía."}</p>`}`);
+  // Portadas: la primera diapositiva de cada material, cuando aparece en pantalla
+  const imgs = [...$app.querySelectorAll("img[data-portada]")];
+  const poner1 = async (img) => {
+    const d = todos.find((x) => x.id === img.dataset.portada);
+    const u = d && (await urlPagina(d, 1, 480));
+    if (u) img.src = u;
+  };
+  if (!("IntersectionObserver" in window)) return imgs.forEach(poner1);
+  const obs = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (obs.unobserve(e.target), poner1(e.target))), { rootMargin: "300px" });
+  imgs.forEach((i) => obs.observe(i));
 }
 
 function vistaAyuda() {
   poner(
     "Cómo usar Finlay",
     `<ol class="ayuda">
-      <li><b>Inicio:</b> tu racha 🔥, la meta del día, el botón <b>Repasar hoy</b>, tu próximo examen y tus asignaturas con su progreso.</li>
-      <li><b>Temas:</b> elige el año y la asignatura. Cada tema tiene <b>Resumen</b>, <b>Cuestionario</b> y la conferencia <b>Completa</b>. Aquí está también el buscador.</li>
+      <li><b>Inicio:</b> tu progreso general, tu racha 🔥, el botón <b>Continuar estudiando</b> (vuelve a la diapositiva donde te quedaste) y lo que te toca hoy.</li>
+      <li><b>Temas:</b> elige el año arriba y luego la asignatura. Cada conferencia tiene sus <b>diapositivas</b>, como en el PDF, y su <b>Cuestionario</b>. Aquí está también el buscador.</li>
+      <li><b>Biblioteca:</b> todas las conferencias, clases taller y libros con su portada. Toca ❤ en una conferencia para guardarla en <b>Favoritos</b>.</li>
       <li><b>Cuestionarios:</b> una pregunta por pantalla. Responde y toca <b>Siguiente</b>. Si fallas, <b>📖 Ver dónde está</b> te lleva a la parte exacta de la conferencia, marcada en verde.</li>
-      <li><b>Progreso:</b> tus días seguidos, lo que respondiste esta semana, cuánto dominas cada asignatura y tus insignias.</li>
       <li><b>Evaluaciones:</b> el <b>repaso del día</b> (lo que fallas vuelve pronto), el <b>examen de práctica</b> con nota de 2 a 5 y el <b>plan para el examen</b>.</li>
-      <li><b>Perfil:</b> tu nombre, apariencia (clara u oscura), tamaño de letra, meta diaria, voz y la <b>copia de seguridad</b>.</li>
-      <li><b>Menú ☰</b> (arriba a la derecha): buscar, todos los materiales, cargar paquete y más.</li>
-      <li>Para cargar tus propios archivos, entra en una asignatura y toca <b>＋ Cargar</b>. Finlay lee el texto dentro del teléfono, sin subir nada.</li>
+      <li><b>Perfil:</b> tu foto, nivel y puntos, <b>Mi progreso</b> (estadísticas, tiempo de estudio y logros), favoritos y la <b>copia de seguridad</b>.</li>
+      <li><b>Configuración</b> (⚙ en el inicio): tu nombre y foto, modo oscuro o automático por la hora, sonido, tamaño de letra, meta diaria y voz.</li>
       <li>Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</li>
     </ol>
     <p class="nota">Meta diaria de preguntas:
@@ -1603,6 +1815,14 @@ document.addEventListener("click", async (ev) => {
     abrirMenu();
   } else if (accion === "tema") {
     cambiarTema(b.dataset.tema);
+  } else if (accion === "favorito") {
+    const ahora = alternarFavorito(b.dataset.id);
+    b.classList.toggle("activo", ahora);
+    b.setAttribute("aria-pressed", ahora);
+    aviso(ahora ? "❤ Guardada en Mis favoritos" : "Quitada de Mis favoritos");
+  } else if (accion === "quitar-foto") {
+    guardarPref("foto", "");
+    router();
   } else if (accion === "cerrar-menu") {
     if (ev.target === b) cerrarMenu();
   } else if (accion === "ampliar") {
@@ -1682,6 +1902,16 @@ document.addEventListener("change", (ev) => {
     aviso("Nombre guardado");
   }
   if (ev.target.id === "aj-tema") cambiarTema(ev.target.value);
+  if (ev.target.id === "aj-auto") {
+    cambiarTema(ev.target.checked ? "hora" : temaReal());
+    router();
+  }
+  if (ev.target.id === "aj-oscuro") {
+    cambiarTema(ev.target.checked ? "oscuro" : "claro");
+    router();
+  }
+  if (ev.target.id === "aj-sonido") guardarPref("sonido", ev.target.checked ? "1" : "0");
+  if (ev.target.id === "aj-foto" && ev.target.files[0]) guardarFoto(ev.target.files[0]);
   if (ev.target.id === "aj-escala") {
     guardarPref("escala", ev.target.value === "1" ? "" : ev.target.value);
     document.documentElement.style.setProperty("--escala", ev.target.value);
@@ -1736,6 +1966,7 @@ async function router() {
   if (!$visor.hidden) cerrarVisor(true);
   voz.detener();
   clearInterval(relojExamen);
+  clearInterval(relojSesion);
   $app.classList.remove("modo-examen");
   modo = "normal";
   const [ruta, consulta = ""] = location.hash.slice(1).split("?");
@@ -1746,8 +1977,9 @@ async function router() {
   liberarDiapositivas();
   pintarNav(partes[0] || "");
   try {
-    if (partes[0] === "temas") await vistaTemas();
-    else if (partes[0] === "progreso") await vistaProgresoGeneral();
+    if (partes[0] === "temas") await vistaTemas(partes[1]);
+    else if (partes[0] === "progreso") await vistaProgresoGeneral(partes[1]);
+    else if (partes[0] === "ajustes") await vistaAjustes();
     else if (partes[0] === "evaluaciones") await vistaEvaluaciones();
     else if (partes[0] === "perfil") await vistaPerfil();
     else if (partes[0] === "anio") await vistaAnio(Number(partes[1]));
@@ -1759,7 +1991,7 @@ async function router() {
       vistaDoc.docId = partes[1];
       await vistaDoc(partes[1], partes[2], Number(new URLSearchParams(consulta).get("p")) || 0);
     }
-    else if (partes[0] === "biblioteca") await vistaBiblioteca();
+    else if (partes[0] === "biblioteca") await vistaBiblioteca(partes[1]);
     else if (partes[0] === "repaso") await vistaRepaso();
     else if (partes[0] === "examen") await vistaExamenInicio(partes[1]);
     else if (partes[0] === "examen-hacer") {
@@ -1777,6 +2009,7 @@ async function router() {
   }
 }
 
+iniciarContadorDeTiempo(db.hoy);
 window.addEventListener("hashchange", router);
 router().then(cargarPaquetesIncluidos);
 
