@@ -1743,7 +1743,41 @@ async function router() {
 }
 
 window.addEventListener("hashchange", router);
-router();
+router().then(cargarPaquetesIncluidos);
+
+// En el APK pueden venir paquetes dentro de la app: se cargan solos la primera vez
+async function cargarPaquetesIncluidos() {
+  let lista;
+  try {
+    const r = await fetch("paquetes/lista.json", { cache: "no-store" });
+    if (!r.ok) return;
+    lista = await r.json();
+  } catch {
+    return;
+  }
+  let hechos = {};
+  try { hechos = JSON.parse(localStorage.getItem("finlay.incluidos") || "{}"); } catch {}
+  const pendientes = lista.filter((p) => hechos[p.archivo] !== p.version);
+  if (!pendientes.length) return;
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+  try {
+    for (const [i, p] of pendientes.entries()) {
+      mostrarProgreso(`Preparando las diapositivas (${i + 1} de ${pendientes.length})…\nSolo pasa una vez.`);
+      const blob = await (await fetch("paquetes/" + p.archivo)).blob();
+      const datos = await leerPaquete(blob);
+      await importarPaquete(datos, (t) => t && mostrarProgreso(`(${i + 1} de ${pendientes.length})\n${t}`));
+      hechos[p.archivo] = p.version;
+      try { localStorage.setItem("finlay.incluidos", JSON.stringify(hechos)); } catch {}
+    }
+    mostrarProgreso(null);
+    aviso("✅ Diapositivas listas");
+  } catch (e) {
+    mostrarProgreso(null);
+    console.error(e);
+    alert("No se pudieron preparar las diapositivas:\n" + (e?.name === "QuotaExceededError" ? "No queda espacio en el teléfono." : e.message));
+  }
+  router();
+}
 
 if ("serviceWorker" in navigator && !window.FinlayAndroid) {
   navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("Sin modo sin conexión:", e));

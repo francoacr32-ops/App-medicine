@@ -258,6 +258,7 @@ def main():
     p.add_argument("--salida", default="Finlay.apk")
     p.add_argument("--version-code", type=int, default=1)
     p.add_argument("--version-name", default="1.0")
+    p.add_argument("--paquetes", help="carpeta con paquetes .zip que la app carga sola al abrirse")
     args = p.parse_args()
 
     tmp = Path(tempfile.mkdtemp(prefix="finlay-apk-"))
@@ -279,6 +280,14 @@ def main():
         for f in sorted((RAIZ / "docs").rglob("*")):
             if f.is_file():
                 z.write(f, "assets/www/" + f.relative_to(RAIZ / "docs").as_posix())
+        if args.paquetes:
+            # Paquetes incluidos: van sin comprimir (ya son .zip) y con una lista para la app
+            import hashlib, json
+            lista = []
+            for f in sorted(Path(args.paquetes).glob("*.zip")):
+                z.write(f, "assets/www/paquetes/" + f.name, compress_type=zipfile.ZIP_STORED)
+                lista.append({"archivo": f.name, "version": hashlib.sha1(f.read_bytes()).hexdigest()[:12]})
+            z.writestr("assets/www/paquetes/lista.json", json.dumps(lista))
 
     if not Path(args.keystore).exists():
         ejecutar(["keytool", "-genkeypair", "-keystore", args.keystore, "-alias", "finlay", "-keyalg", "RSA",
