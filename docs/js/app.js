@@ -319,7 +319,7 @@ async function vistaPerfil() {
   poner("Perfil", `
     <section class="tarjeta perfil-cabeza">
       <img src="iconos/logo.webp" alt="" class="perfil-logo">
-      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.2</span><span class="sub">${docs.length} materiales${espacio}</span></div>
+      <div><b>Finlay</b><span class="sub">Estudio médico · versión 1.3</span><span class="sub">${docs.length} materiales${espacio}</span></div>
     </section>
     <h2>Tus datos</h2>
     <div class="tarjeta ajustes">
@@ -615,8 +615,14 @@ async function vistaDoc(docId, pestana, irA = 0) {
     // Sin imagen (Word o PowerPoint cargado desde el teléfono): el texto de cada página en una tarjeta
     const frags = await db.fragmentosDe(doc.id);
     const paginas = [...new Set(frags.map((x) => x.pagina))];
-    cuerpo = `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
-        <p>Ábrela en WPS u Office, elige <b>Exportar a PDF</b> y carga el PDF en Finlay.</p></div>
+    const aviso = doc.origen === "paquete"
+      ? `<div class="no-encontrado consejo"><b>Faltan las diapositivas de esta conferencia</b>
+          <p>Carga el paquete <b>.zip</b> de ${esc(doc.asignaturas[0].split("|").slice(1).join("|"))} que te mandó Claude.
+          Así se ve igual que el PDF. No pierdes tu progreso.</p>
+          <button class="btn ancho" data-accion="paquete">${ico("cargar")} Cargar paquete .zip</button></div>`
+      : `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
+          <p>Ábrela en WPS u Office, elige <b>Exportar a PDF</b> y carga el PDF en Finlay.</p></div>`;
+    cuerpo = `${aviso}
       <div class="diapos">${(await Promise.all(paginas.map(async (n) => `
         <figure class="diapo diapo-texto" id="d${n}">
           <div class="diapo-hoja">${esc(await db.textoDePagina(doc.id, n)).replace(/\n/g, "<br>")}</div>
