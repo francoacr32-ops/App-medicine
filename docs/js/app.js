@@ -1,13 +1,14 @@
 // Finlay — pantallas y navegación.
 
 import * as db from "./db.js";
-import { extraerTexto, tipoDeArchivo, FORMATOS } from "./extraer.js";
+import { extraerTexto, tipoDeArchivo, FORMATOS, cargarJSZip } from "./extraer.js";
 import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
 import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata } from "./cuestionario.js";
 import { localizar } from "./guia.js";
+import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
 import { pref, guardarPref, htmlMiniatura, htmlAnillo, htmlPulso, htmlSemana, insignias } from "./inicio.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
@@ -446,7 +447,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
       (d) => `<li class="doc">
         <a href="#/doc/${d.id}" class="doc-nombre">${icono(d)} ${esc(d.nombre)}</a>
         <span class="sub">${d.paginas ? `${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}` : "sin texto completo"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
-        ${d.resumen || d.cuestionario ? `<span class="etiquetas">${d.resumen ? '<span class="chip">📋 Resumen</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
+        ${d.cuestionario || d.diapositivas || d.pdf ? `<span class="etiquetas">${d.diapositivas || d.pdf ? '<span class="chip">🖼️ Diapositivas</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
         <span class="acciones">
           <button class="btn mini" data-accion="exportar" data-id="${d.id}">📤 Exportar texto</button>
           <button class="btn mini peligro" data-accion="quitar" data-id="${d.id}">Quitar</button>
@@ -478,7 +479,6 @@ async function vistaAsignatura(id, pestana = "conferencias") {
         <ul>${otrosLibros.map((d) => `<li><button class="btn mini" data-accion="vincular" data-id="${d.id}" data-asig="${esc(id)}">＋</button> ${esc(d.nombre)}</li>`).join("")}</ul>
         <p class="nota">Así el libro no se guarda dos veces.</p></details>` : ""}
      <div class="acciones abajo">
-       ${docs.some((d) => d.resumen?.length) ? `<button class="btn mini" data-accion="escuchar-asig" data-asig="${esc(id)}">🎧 Escuchar todos los resúmenes</button>` : ""}
        ${docs.some((d) => d.cuestionario?.length) ? `<a class="btn mini" href="#/examen/${encodeURIComponent(id)}">📝 Examen de esta asignatura</a>` : ""}
        <a class="btn mini" href="#/planes">📅 Poner fecha de examen</a>
      </div>
@@ -565,71 +565,78 @@ async function vistaLeer(docId, pagina, q) {
      <p class="sub">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>
      ${nav}
      <button class="btn ancho" data-accion="leer-pagina">🔊 Escuchar esta página</button>
+     ${tieneVisual(doc) ? `<img class="visor-diapo" id="leer-img" alt="${esc(doc.etiqueta)} ${pagina}" data-accion="ampliar">` : ""}
      <div class="pagina">${resaltar(texto, patrones).replace(/\n/g, "<br>")}</div>
      ${nav}`,
     `#/doc/${docId}/texto`
   );
   if (q) document.querySelector("[data-accion=volver]")?.setAttribute("data-destino", "historial");
   vistaLeer.texto = texto;
+  if (tieneVisual(doc)) urlPagina(doc, pagina).then((u) => { const i = document.getElementById("leer-img"); if (u && i) i.src = u; else i?.remove(); });
   const primera = $app.querySelector("mark");
   if (primera) primera.scrollIntoView({ block: "center" });
 }
 
 // ---------- Pantalla: un documento (resumen, cuestionario y texto completo) ----------
 
-async function vistaDoc(docId, pestana) {
+async function vistaDoc(docId, pestana, irA = 0) {
   const doc = await db.obtenerDocumento(docId);
   if (!doc) return (location.hash = "#/");
   guardarPref("ultimo", docId);
-  if (!pestana) pestana = doc.resumen ? "resumen" : doc.cuestionario ? "cuestionario" : "texto";
+  if (pestana !== "cuestionario") pestana = "conferencia";
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
+  const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
+  const nPreg = doc.cuestionario?.length || 0;
   const pestanas = `<nav class="pestanas">
-      <a href="${base}/resumen" class="${pestana === "resumen" ? "activa" : ""}">Resumen</a>
-      <a href="${base}/cuestionario" class="${pestana === "cuestionario" ? "activa" : ""}">Cuestionario</a>
-      <a href="${base}/texto" class="${pestana === "texto" ? "activa" : ""}">Completa</a>
+      <a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${nombreTipo}</a>
+      <a href="${base}/cuestionario" class="${pestana === "cuestionario" ? "activa" : ""}">Cuestionario${nPreg ? ` (${nPreg})` : ""}</a>
     </nav>`;
-  const pedirAClaude = (que) => `<div class="no-encontrado"><b>Todavía no hay ${que}.</b>
-      <p>${doc.paginas ? `Pulsa <b>📤 Exportar texto</b> y mándale el archivo a Claude. Él te devolverá un paquete con el ${que}.` : ""}</p>
-      ${doc.paginas ? `<button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto</button>` : ""}</div>`;
 
   let cuerpo = "";
-  if (pestana === "resumen") {
-    if (!doc.resumen?.length) cuerpo = pedirAClaude("resumen");
-    else {
-      cuerpo =
-        `<button class="btn ancho" data-accion="leer-resumen">🔊 Escuchar el resumen</button>` +
-        doc.resumen
-          .map(
-            (s) => `<section class="seccion-resumen">
-              ${s.titulo ? `<h3>${esc(s.titulo)}</h3>` : ""}
-              <div>${esc(s.texto).replace(/\n/g, "<br>")}</div>
-              ${htmlFigura(s.imagen, s.pie)}
-              ${s.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(s.fuente)}</p>` : ""}
-            </section>`
-          )
-          .join("");
-    }
-  } else if (pestana === "cuestionario") {
-    cuerpo = doc.cuestionario?.length ? await htmlCuestionario(doc) : pedirAClaude("cuestionario");
+  if (pestana === "cuestionario") {
+    cuerpo = nPreg
+      ? await htmlCuestionario(doc)
+      : `<div class="no-encontrado"><b>Todavía no hay cuestionario.</b>
+          <p>Pulsa <b>📤 Exportar texto</b> y mándale el archivo a Claude: te devolverá el cuestionario.</p>
+          <button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto</button></div>`;
+  } else if (tieneVisual(doc)) {
+    // Diapositivas con su formato original, una debajo de otra como en un lector de PDF
+    const total = totalPaginas(doc);
+    const palabra = doc.etiqueta === "diap." || doc.diapositivas ? "Diapositiva" : "Página";
+    cuerpo = `<p class="sub diapo-info">${total} ${palabra === "Diapositiva" ? "diapositivas" : "páginas"} · toca una para ampliarla</p>
+      <div class="diapos">${Array.from({ length: total }, (_, k) => k + 1).map((n) => `
+        <figure class="diapo" id="d${n}">
+          <img data-diapo="${n}" alt="${palabra} ${n}" data-accion="ampliar" width="960" height="720">
+          <figcaption><span>${palabra} ${n}</span>
+            <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar la ${palabra.toLowerCase()} ${n}">${ico("voz")}</button></figcaption>
+        </figure>`).join("")}</div>`;
+  } else if (doc.paginas) {
+    // Sin imagen (Word o PowerPoint cargado desde el teléfono): el texto de cada página en una tarjeta
+    const frags = await db.fragmentosDe(doc.id);
+    const paginas = [...new Set(frags.map((x) => x.pagina))];
+    cuerpo = `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
+        <p>Ábrela en WPS u Office, elige <b>Exportar a PDF</b> y carga el PDF en Finlay.</p></div>
+      <div class="diapos">${(await Promise.all(paginas.map(async (n) => `
+        <figure class="diapo diapo-texto" id="d${n}">
+          <div class="diapo-hoja">${esc(await db.textoDePagina(doc.id, n)).replace(/\n/g, "<br>")}</div>
+          <figcaption><span>${esc(doc.etiqueta)} ${n}</span>
+            <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar">${ico("voz")}</button></figcaption>
+        </figure>`))).join("")}</div>`;
   } else {
-    cuerpo = doc.paginas
-      ? `<p>${doc.paginas} ${doc.etiqueta === "diap." ? "diapositivas" : "páginas"} con texto.</p>
-         <a class="btn ancho" href="#/leer/${doc.id}/${doc.primera ?? 1}">📖 Leer completa</a>
-         <form class="buscador" data-ambito="${esc(asigActual)}">
-           <input name="q" type="search" placeholder="Buscar en ${esc(asigActual.split("|")[1])}…" required>
-           <button class="btn">Buscar</button></form>
-         <button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>`
-      : `<p class="vacio">Este material solo tiene resumen y cuestionario (no tiene el texto completo).</p>`;
+    cuerpo = `<p class="vacio">Este material no tiene la conferencia completa.</p>`;
   }
 
   poner(
     doc.nombre,
-    `<p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>${pestanas}${cuerpo}`,
+    `<p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>${pestanas}${cuerpo}
+     ${pestana === "conferencia" && doc.paginas ? `<button class="btn mini abajo" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>` : ""}`,
     enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
   );
   vistaDoc.doc = doc;
   if (pestana === "cuestionario") iniciarSesion(false);
+  else if (tieneVisual(doc)) activarCarga($app, doc);
+  if (irA) document.getElementById("d" + irA)?.scrollIntoView({ block: "start" });
 }
 
 // ---------- Motor de preguntas (sirve para el cuestionario, el repaso y el examen) ----------
@@ -713,6 +720,7 @@ async function pintarVisor() {
   document.getElementById("visor-cuerpo").innerHTML = `
     <div class="respuesta-correcta"><b>✏️ Respuesta correcta:</b> ${esc(textoRespuesta(p).replace(/^(La respuesta correcta es|Las correctas son:|Respuestas?:)\s*/, ""))}</div>
     <p class="cita">${cita(doc, doc.etiqueta, actual)}</p>
+    ${tieneVisual(doc) ? `<img class="visor-diapo" id="visor-img" alt="${esc(doc.etiqueta)} ${actual}" data-accion="ampliar">` : ""}
     ${esLaMarcada
       ? lugar.rango
         ? `<p class="nota">La parte <mark class="corrector">marcada en verde</mark> es donde está la respuesta.</p>
@@ -720,8 +728,10 @@ async function pintarVisor() {
         : `<p class="nota">No pude ubicar la frase exacta: revisa esta página.</p>`
       : `<button class="btn mini" data-accion="visor-pag" data-p="${lugar.pagina}">✏️ Volver a la parte marcada (${esc(doc.etiqueta)} ${lugar.pagina})</button>`}
     ${nav}
+    ${tieneVisual(doc) ? `<p class="sub">Texto de la diapositiva:</p>` : ""}
     <div class="pagina">${htmlConCorrector(texto, esLaMarcada ? lugar.rango : null)}</div>
     ${nav}`;
+  if (tieneVisual(doc)) urlPagina(doc, actual).then((u) => { const i = document.getElementById("visor-img"); if (u && i) i.src = u; else i?.remove(); });
   const marca = document.getElementById("corrector");
   const caja = $visor.querySelector(".visor-caja");
   if (marca) marca.scrollIntoView({ block: "center" });
@@ -1135,9 +1145,25 @@ async function planDeHoy() {
 
 // ---------- Pantalla: copia de seguridad y compartir ----------
 async function compartirArchivo(nombre, contenido, tipo) {
+  // contenido puede ser texto (JSON) o un Blob (paquete .zip con diapositivas)
+  const tamano = typeof contenido === "string" ? contenido.length : contenido.size;
   // En el APK de Android: el teléfono pregunta si guardar o enviar (Zapya, WhatsApp, Claude…)
   if (window.FinlayAndroid) {
-    window.FinlayAndroid.guardar(nombre, contenido, tipo);
+    if (typeof contenido === "string") {
+      window.FinlayAndroid.guardar(nombre, contenido, tipo);
+    } else {
+      // Los archivos binarios pasan al teléfono por trozos en base64
+      const bytes = new Uint8Array(await contenido.arrayBuffer());
+      const TROZO = 384 * 1024;
+      window.FinlayAndroid.iniciarArchivo();
+      for (let i = 0; i < bytes.length; i += TROZO) {
+        const parte = bytes.subarray(i, i + TROZO);
+        let bin = "";
+        for (let j = 0; j < parte.length; j += 8192) bin += String.fromCharCode.apply(null, parte.subarray(j, j + 8192));
+        window.FinlayAndroid.agregarTrozo(btoa(bin));
+      }
+      window.FinlayAndroid.terminarArchivo(nombre, tipo);
+    }
     return;
   }
   const archivo = new File([contenido], nombre, { type: tipo });
@@ -1156,7 +1182,7 @@ async function compartirArchivo(nombre, contenido, tipo) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  aviso(`Guardado en Descargas: ${nombre} (${Math.ceil(contenido.length / 1024)} KB)`);
+  aviso(`Guardado en Descargas: ${nombre} (${Math.ceil(tamano / 1024)} KB)`);
 }
 
 async function vistaCopia() {
@@ -1166,12 +1192,12 @@ async function vistaCopia() {
     "Copia y compartir",
     `<section class="panel">
        <p class="grande">💾 Copia de seguridad</p>
-       <p>Guarda <b>todo</b> (materiales, resúmenes, cuestionarios y tu progreso) en un solo archivo. Sirve para no perder nada o para pasarlo a otro teléfono.</p>
+       <p>Guarda <b>todo</b> (materiales, diapositivas, cuestionarios y tu progreso) en un solo archivo. Sirve para no perder nada o para pasarlo a otro teléfono.</p>
        <button class="btn ancho" data-accion="copia-completa" ${docs.length ? "" : "disabled"}>💾 Guardar copia completa</button>
      </section>
      <section class="panel">
        <p class="grande">📲 Compartir con un compañero</p>
-       <p>Crea un archivo con los materiales, resúmenes y cuestionarios (sin tu progreso). Pásalo por <b>Zapya, Bluetooth o WhatsApp</b>: no gasta datos si usas Zapya o Bluetooth. Tu compañero lo carga en su Finlay con 📥.</p>
+       <p>Crea un archivo con los materiales, diapositivas y cuestionarios (sin tu progreso). Pásalo por <b>Zapya, Bluetooth o WhatsApp</b>: no gasta datos si usas Zapya o Bluetooth. Tu compañero lo carga en su Finlay con 📥.</p>
        <select id="ambito-compartir">${opciones.replace('<option value="todo">Toda la carrera</option>', "")}</select>
        <button class="btn ancho" data-accion="compartir" ${docs.length ? "" : "disabled"}>📤 Compartir</button>
        <p class="nota">Solo se comparten las asignaturas que tienen cuestionarios.</p>
@@ -1208,11 +1234,45 @@ async function exportarPaquete(ambito, conProgreso) {
       respuestas: conProgreso ? await db.todasLasRespuestas() : null,
       diario: conProgreso ? await db.listarDiario() : null,
     });
-    const nombre = conProgreso
-      ? `finlay-copia-${db.hoy()}.json`
-      : `finlay-${normalizar(nombreAmbito(ambito)).trim().replace(/\s+/g, "-")}.json`;
+    const base = conProgreso
+      ? `finlay-copia-${db.hoy()}`
+      : `finlay-${normalizar(nombreAmbito(ambito)).trim().replace(/\s+/g, "-")}`;
+    if (!docs.some((d) => d.diapositivas || d.pdf)) {
+      mostrarProgreso(null);
+      await compartirArchivo(base + ".json", JSON.stringify(paquete), "application/json");
+      return;
+    }
+    // Con diapositivas o PDF: un .zip con paquete.json + las imágenes y PDF originales
+    const JSZip = await cargarJSZip();
+    const zip = new JSZip();
+    for (let k = 0; k < docs.length; k++) {
+      const d = docs[k];
+      const m = paquete.materiales[k];
+      if (d.diapositivas) {
+        const carpeta = `diapositivas/${String(k + 1).padStart(3, "0")}`;
+        let total = 0;
+        for (let n = 1; n <= d.diapositivas; n++) {
+          if (n % 10 === 1) mostrarProgreso(`Preparando diapositivas de ${d.nombre}\n${n} de ${d.diapositivas}`);
+          const blob = await db.obtenerDiapositiva(d.id, n);
+          if (!blob) continue;
+          zip.file(`${carpeta}/${String(n).padStart(3, "0")}.webp`, blob);
+          total = n;
+        }
+        if (total) m.diapositivas = { carpeta, total };
+      }
+      if (d.pdf) {
+        const blob = await db.obtenerArchivo(d.id);
+        if (blob) {
+          m.pdf = `archivos/${String(k + 1).padStart(3, "0")}.pdf`;
+          zip.file(m.pdf, blob);
+        }
+      }
+    }
+    zip.file("paquete.json", JSON.stringify(paquete), { compression: "DEFLATE" });
+    mostrarProgreso("Juntando todo en un archivo…");
+    const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
     mostrarProgreso(null);
-    await compartirArchivo(nombre, JSON.stringify(paquete), "application/json");
+    await compartirArchivo(base + ".zip", blob, "application/zip");
   } catch (e) {
     mostrarProgreso(null);
     alert("No se pudo crear el archivo: " + e.message);
@@ -1338,9 +1398,8 @@ async function cargarArchivos(archivos, asigId, tipo) {
       mostrarProgreso(`Abriendo ${archivo.name}…`);
       const paginas = await extraerTexto(archivo, (t) => mostrarProgreso(`${archivo.name}\n${t}`));
       const conTexto = paginas.filter((p) => p.texto.replace(/\s/g, "").length > 20);
-      if (!conTexto.length) {
-        throw new Error("No tiene texto que se pueda leer. Probablemente es un PDF escaneado (fotos de páginas). Lo añadiremos en una etapa futura.");
-      }
+      const esPdf = tipoDeArchivo(archivo.name) === "pdf";
+      if (!conTexto.length && !esPdf) throw new Error("No tiene texto que se pueda leer.");
 
       mostrarProgreso(`${archivo.name}\nGuardando…`);
       const fragmentos = [];
@@ -1356,15 +1415,19 @@ async function cargarArchivos(archivos, asigId, tipo) {
         tipo,
         asignaturas: [asigId],
         paginas: paginas.length,
-        primera: conTexto[0].n,
+        primera: conTexto[0]?.n ?? 1,
+        pdf: esPdf,
         etiqueta: paginas[0].etiqueta,
         sinTexto: paginas.length - conTexto.length,
         fecha: Date.now(),
       };
       await db.guardarDocumento(doc, fragmentos);
+      if (esPdf) await db.guardarArchivo(doc.id, archivo);
       existentes.push(doc);
       cargados++;
-      if (doc.sinTexto > paginas.length * 0.3) {
+      if (!conTexto.length) {
+        errores.push(`${archivo.name}: es un PDF escaneado (fotos de páginas). Puedes verlo, pero el buscador y los cuestionarios no funcionan con él.`);
+      } else if (doc.sinTexto > paginas.length * 0.3) {
         errores.push(`${archivo.name}: ${doc.sinTexto} de ${paginas.length} páginas no tienen texto (pueden ser imágenes escaneadas).`);
       }
     } catch (e) {
@@ -1482,6 +1545,11 @@ document.addEventListener("click", async (ev) => {
     const d = b.dataset.destino;
     if (d === "historial") history.back();
     else if (d) location.hash = d;
+  } else if (accion === "leer-diapo") {
+    const d = vistaDoc.doc;
+    const t = await db.textoDePagina(d.id, Number(b.dataset.n));
+    if (t.trim()) voz.leer(t, velocidadVoz());
+    else aviso("Esta diapositiva no tiene texto para leer.");
   } else if (accion === "ses-sig") {
     mostrarPregunta(sesion.actual + 1);
   } else if (accion === "ses-ant") {
@@ -1549,7 +1617,7 @@ $paquete.addEventListener("change", async () => {
       (r.quitadas ? `• Asignaturas quitadas: ${r.quitadas.join(", ")}\n` : "") +
       (r.imagenes ? `• Imágenes: ${r.imagenes}\n` : "") +
       `• Materiales nuevos: ${r.nuevos}\n• Materiales actualizados: ${r.actualizados}\n` +
-      `• Resúmenes: ${r.resumenes}\n• Preguntas: ${r.preguntas}`
+      (r.diapositivas ? `• Diapositivas: ${r.diapositivas}\n` : "") + `• Preguntas: ${r.preguntas}`
     );
     const anios = [...new Set([...datos.materiales, ...(datos.asignaturas || [])].map((m) => Number(m.anio)))];
     location.hash = anios.length === 1 ? `#/anio/${anios[0]}` : "#/";
@@ -1634,6 +1702,7 @@ async function router() {
   const q = new URLSearchParams(consulta).get("q") || "";
   cerrarMenu();
   sesion = null;
+  liberarDiapositivas();
   pintarNav(partes[0] || "");
   try {
     if (partes[0] === "temas") await vistaTemas();
@@ -1647,7 +1716,7 @@ async function router() {
     else if (partes[0] === "doc") {
       if (vistaDoc.docId !== partes[1]) vistaDoc.filtro = "todas";
       vistaDoc.docId = partes[1];
-      await vistaDoc(partes[1], partes[2]);
+      await vistaDoc(partes[1], partes[2], Number(new URLSearchParams(consulta).get("p")) || 0);
     }
     else if (partes[0] === "biblioteca") await vistaBiblioteca();
     else if (partes[0] === "repaso") await vistaRepaso();

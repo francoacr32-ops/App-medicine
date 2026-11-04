@@ -5,6 +5,7 @@
 import * as db from "./db.js";
 import { fragmentarPagina, limpiar } from "./texto.js";
 import { errorEnPregunta } from "./cuestionario.js";
+import { cargarJSZip } from "./extraer.js";
 
 /** Huella corta del contenido, para no guardar dos veces la misma imagen. */
 function huella(texto) {
@@ -52,11 +53,25 @@ function validarPregunta(p, i, nombre) {
 /** Lee y comprueba el archivo. Devuelve el paquete o lanza un error en español. */
 export async function leerPaquete(archivo) {
   let datos;
+  let zip = null;
   try {
-    datos = JSON.parse(await archivo.text());
+    // Los paquetes .zip traen paquete.json y las diapositivas como imágenes
+    const cabeza = new Uint8Array(await archivo.slice(0, 2).arrayBuffer());
+    let texto;
+    if (cabeza[0] === 0x50 && cabeza[1] === 0x4b) {
+      const JSZip = await cargarJSZip();
+      zip = await JSZip.loadAsync(await archivo.arrayBuffer());
+      const j = zip.file("paquete.json");
+      if (!j) throw new Error();
+      texto = await j.async("string");
+    } else {
+      texto = await archivo.text();
+    }
+    datos = JSON.parse(texto);
   } catch {
     throw new Error("El archivo no es un paquete de Finlay válido (no se pudo leer).");
   }
+  Object.defineProperty(datos, "__zip", { value: zip, enumerable: false });
   if (datos?.formato !== "finlay-paquete") throw new Error("Este archivo no es un paquete de Finlay.");
   datos.materiales ||= [];
   if (!Array.isArray(datos.materiales)) throw new Error("Este archivo no es un paquete de Finlay.");
@@ -151,6 +166,33 @@ export async function importarPaquete(datos, progreso = () => {}) {
       const id = `${doc.id}|${r.indice}`;
       const previa = respuestasPrevias.get(id);
       if (!previa || (previa.fecha || 0) < (r.fecha || 0)) respuestasNuevas.push({ ...r, id, docId: doc.id });
+    }
+    // Diapositivas originales (imágenes) y PDF que vienen dentro del .zip
+    const zip = datos.__zip;
+    if (zip && m.diapositivas?.carpeta && m.diapositivas.total > 0) {
+      const { carpeta, total } = m.diapositivas;
+      let lote = [];
+      let guardadas = 0;
+      for (let n = 1; n <= total; n++) {
+        const f = zip.file(`${carpeta}/${String(n).padStart(3, "0")}.webp`);
+        if (!f) continue;
+        lote.push({ n, blob: new Blob([await f.async("arraybuffer")], { type: "image/webp" }) });
+        if (lote.length === 20 || n === total) {
+          progreso(`Guardando diapositivas de ${m.nombre}\n${n} de ${total}`);
+          await db.guardarDiapositivas(doc.id, lote);
+          guardadas += lote.length;
+          lote = [];
+        }
+      }
+      if (lote.length) await db.guardarDiapositivas(doc.id, lote);
+      doc.diapositivas = total;
+      await db.actualizarDocumento(doc);
+      resultado.diapositivas = (resultado.diapositivas || 0) + guardadas;
+    }
+    if (zip && m.pdf && zip.file(m.pdf)) {
+      await db.guardarArchivo(doc.id, new Blob([await zip.file(m.pdf).async("arraybuffer")], { type: "application/pdf" }));
+      doc.pdf = true;
+      await db.actualizarDocumento(doc);
     }
     if (m.resumen) resultado.resumenes++;
     resultado.preguntas += (m.cuestionario || []).length;

@@ -28,7 +28,7 @@ export async function extraerTexto(archivo, progreso = () => {}) {
 
 // ---------- PDF ----------
 let pdfjsPromesa = null;
-function cargarPdfjs() {
+export function cargarPdfjs() {
   if (!pdfjsPromesa) {
     pdfjsPromesa = import(BASE + "pdf.min.mjs").then((pdfjs) => {
       pdfjs.GlobalWorkerOptions.workerSrc = BASE + "pdf.worker.min.mjs";
@@ -69,7 +69,7 @@ async function extraerPdf(archivo, progreso) {
 
 // ---------- Word y PowerPoint (son archivos ZIP con XML dentro) ----------
 let jszipPromesa = null;
-function cargarJSZip() {
+export function cargarJSZip() {
   if (!jszipPromesa) {
     jszipPromesa = new Promise((resolver, rechazar) => {
       if (window.JSZip) return resolver(window.JSZip);

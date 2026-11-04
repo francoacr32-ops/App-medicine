@@ -209,14 +209,18 @@ public class Principal extends Activity {
         }
     }
 
+    java.io.ByteArrayOutputStream trozos;
+
     // ---------- Guardar o enviar un archivo ----------
     void guardarOEnviar(final String nombre, final String contenido, final String mime) {
-        final byte[] bytes;
         try {
-            bytes = contenido.getBytes("UTF-8");
+            guardarOEnviar(nombre, contenido.getBytes("UTF-8"), mime);
         } catch (Exception e) {
-            return;
+            // no debería pasar: UTF-8 siempre existe
         }
+    }
+
+    void guardarOEnviar(final String nombre, final byte[] bytes, final String mime) {
         String[] opciones = {"💾 Guardar en el teléfono", "📤 Enviar (Zapya, WhatsApp, Claude, Bluetooth…)"};
         new AlertDialog.Builder(this)
                 .setTitle(nombre)
@@ -305,6 +309,34 @@ public class Principal extends Activity {
         public void detener() {
             if (tts != null) tts.stop();
             ultimoTrozo = null;
+        }
+
+        // Archivos binarios (.zip con diapositivas): llegan por trozos en base64
+        @JavascriptInterface
+        public void iniciarArchivo() {
+            synchronized (Principal.this) { trozos = new java.io.ByteArrayOutputStream(); }
+        }
+
+        @JavascriptInterface
+        public void agregarTrozo(String base64) {
+            synchronized (Principal.this) {
+                if (trozos == null) trozos = new java.io.ByteArrayOutputStream();
+                byte[] b = android.util.Base64.decode(base64, android.util.Base64.DEFAULT);
+                trozos.write(b, 0, b.length);
+            }
+        }
+
+        @JavascriptInterface
+        public void terminarArchivo(final String nombre, final String mime) {
+            final byte[] bytes;
+            synchronized (Principal.this) {
+                if (trozos == null) return;
+                bytes = trozos.toByteArray();
+                trozos = null;
+            }
+            runOnUiThread(new Runnable() {
+                @Override public void run() { guardarOEnviar(nombre, bytes, mime); }
+            });
         }
 
         @JavascriptInterface

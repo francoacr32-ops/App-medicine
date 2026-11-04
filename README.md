@@ -14,7 +14,7 @@ materiales se quedan en tu teléfono** y nunca se suben a internet.
 - **Voz**: lee en voz alta con la voz del teléfono (gratis, sin internet).
 - **Exportar texto** de una conferencia (archivo pequeño) para que Claude prepare
   resúmenes y cuestionarios.
-- **Paquetes de Claude**: conferencias completas + resumen + cuestionario, por año.
+- **Paquetes de Claude** (.zip, uno por asignatura): las diapositivas originales de cada conferencia, vistas como en un PDF, + texto para el buscador + cuestionario.
 - **Cuestionarios estilo examen cubano**: V o F, marque con X, enlace, complete,
   selección única y pregunta-respuesta, con explicación y fuente.
 - **🧠 Repaso del día** con repetición espaciada, **🔥 racha** y meta diaria.

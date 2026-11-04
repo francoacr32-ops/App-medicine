@@ -499,3 +499,17 @@ h2.semestre .sub { font-weight: 400; }
 .pedir-nombre { margin-bottom: 14px; gap: 8px; }
 .pedir-nombre label { font-weight: 600; }
 .pedir-nombre .buscador { margin: 0; }
+
+/* Diapositivas con su formato original (como un lector de PDF) */
+.diapo-info { margin: 4px 0 10px; }
+.diapos { display: flex; flex-direction: column; gap: 14px; }
+.diapo { margin: 0; background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; overflow: hidden; box-shadow: var(--sombra); scroll-margin-top: 70px; }
+.diapo img { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; object-fit: contain; background: #fff; cursor: zoom-in; }
+.diapo img[src] { aspect-ratio: auto; }
+.diapo figcaption { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 4px 12px; font-size: .85rem; color: var(--suave); border-top: 1px solid var(--borde); }
+.mini-voz { width: 36px; height: 36px; }
+.mini-voz .ico { width: 22px; height: 22px; }
+.diapo-sin-imagen img { display: none; }
+.diapo-texto .diapo-hoja { padding: 16px; min-height: 160px; background: #fff; color: #1b2626; line-height: 1.55; overflow-wrap: anywhere; }
+.consejo { margin-bottom: 12px; border-left-color: var(--naranja); }
+.visor-diapo { display: block; width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--borde); background: #fff; margin: 8px 0 12px; cursor: zoom-in; }

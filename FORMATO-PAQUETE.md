@@ -47,6 +47,21 @@ material de estudio): se entregan por el chat.
 }
 ```
 
+## Paquetes .zip (con las diapositivas originales)
+
+Desde la versión 1.3 un paquete puede ser un **.zip** que contiene:
+
+```
+paquete.json                       ← el mismo formato de arriba
+diapositivas/01-conferencia-1/001.webp
+diapositivas/01-conferencia-1/002.webp …
+archivos/001.pdf                   ← opcional
+```
+
+Cada página se guarda como imagen WebP de 960 px de ancho (calidad 60): una conferencia de
+40 diapositivas ocupa ≈ 1,5 MB. Se prepara un .zip por asignatura. Las copias de seguridad y los
+paquetes que se comparten desde la app también se crean así cuando hay diapositivas o PDF.
+
 ## Campos
 
 | Campo | Obligatorio | Descripción |
@@ -60,7 +75,9 @@ material de estudio): se entregan por el chat.
 | `tipo` | no | `conferencia` (por defecto), `taller` (clase taller) o `libro` |
 | `etiqueta` | no | `pág.`, `diap.` o `parte` |
 | `paginas` | no | Texto completo, página a página (para el buscador y la lectura) |
-| `resumen` | no | Secciones `{titulo, texto, fuente}` y opcionalmente `imagen` + `pie` |
+| `diapositivas` | no | Solo en paquetes .zip: `{carpeta, total}`. Las páginas originales están en `carpeta/001.webp`, `002.webp`… y se muestran como en un PDF |
+| `pdf` | no | Solo en paquetes .zip: ruta de un PDF dentro del .zip (por ejemplo `archivos/001.pdf`); Finlay lo dibuja página a página |
+| `resumen` | no | **Ya no se usa** (desde la versión 1.3 la app muestra las diapositivas originales en vez de resúmenes). Se ignora si viene |
 | `cuestionario` | no | Lista de preguntas (ver tipos abajo). Todas aceptan `explicacion` y `fuente` |
 
 ## Tipos de pregunta (estilo de los exámenes cubanos)
@@ -78,8 +95,7 @@ Todas las preguntas aceptan además `cita`: la frase **literal** del material do
 
 ## Imágenes
 
-Arriba del paquete, `"imagenes": { "nombre": "data:image/jpeg;base64,…" }`. Las preguntas y las
-secciones del resumen las usan con `"imagen": "nombre"` y un `"pie"` opcional. Finlay guarda cada
+Arriba del paquete, `"imagenes": { "nombre": "data:image/jpeg;base64,…" }`. Las preguntas las usan con `"imagen": "nombre"` y un `"pie"` opcional. Finlay guarda cada
 imagen una sola vez (aunque se importe varias veces) y la muestra con zoom al tocarla.
 
 Preparación (herramienta `herramientas/imagenes.py`):
@@ -89,10 +105,10 @@ Preparación (herramienta `herramientas/imagenes.py`):
    de "señale" o "enlace cada número con su nombre", y `--recorte` si sobra parte.
 4. `datauri` para pegarla en el paquete. Pocas imágenes por conferencia: los datos son caros.
 
-## Reglas para Claude al preparar resúmenes y cuestionarios
+## Reglas para Claude al preparar los cuestionarios
 
 1. Usar **solo** la información del material recibido. Nada de conocimiento externo.
-2. Cada sección del resumen y cada pregunta lleva su `fuente` (página o diapositiva), y cada pregunta su `cita` literal copiada del material.
+2. Cada pregunta lleva su `fuente` (página o diapositiva), y cada pregunta su `cita` literal copiada del material.
 3. Cuestionario recomendado por conferencia: 2–3 V o F (de 4–6 afirmaciones), 2 de marque con X, 1–2 de enlace, 2–3 de complete, 2 de selección única y 2 de pregunta y respuesta. Desordenar la columna B y variar la posición de las respuestas correctas.
 4. Todo en español, con la terminología de la medicina cubana usada en el material.
 5. Las clases taller (`tipo: "taller"`) se usan como fuente adicional de preguntas prácticas.

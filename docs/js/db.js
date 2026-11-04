@@ -1,7 +1,7 @@
 // Base de datos local de Finlay (IndexedDB): todo se guarda en el teléfono.
 
 const NOMBRE_DB = "finlay";
-const VERSION_DB = 4;
+const VERSION_DB = 5;
 let dbPromesa = null;
 
 function abrir() {
@@ -37,6 +37,11 @@ function abrir() {
       if (ev.oldVersion < 4) {
         // Imágenes de las preguntas y los resúmenes. id = huella del contenido (no se repiten)
         db.createObjectStore("imagenes", { keyPath: "id" });
+      }
+      if (ev.oldVersion < 5) {
+        // Diapositivas como imágenes (clave "docId|número") y PDF originales cargados desde el teléfono (clave docId)
+        db.createObjectStore("diapositivas");
+        db.createObjectStore("archivos");
       }
     };
     pet.onsuccess = () => resolver(pet.result);
@@ -166,6 +171,7 @@ export async function borrarDocumento(docId) {
   await finTransaccion(tx);
   cacheFragmentos.delete(docId);
   await borrarRespuestas(docId);
+  await borrarVisual(docId);
 }
 
 // ---------- Respuestas de cuestionarios (progreso) ----------
@@ -275,6 +281,34 @@ export async function borrarRespuestas(docId) {
       c.continue();
     }
   };
+  await finTransaccion(tx);
+}
+
+// ---------- Diapositivas y PDF originales ----------
+export async function guardarDiapositivas(docId, lista) {
+  const db = await abrir();
+  const tx = db.transaction("diapositivas", "readwrite");
+  for (const { n, blob } of lista) tx.objectStore("diapositivas").put(blob, `${docId}|${n}`);
+  await finTransaccion(tx);
+}
+
+export async function obtenerDiapositiva(docId, n) {
+  return promesa((await almacen("diapositivas")).get(`${docId}|${n}`));
+}
+
+export async function guardarArchivo(docId, blob) {
+  return promesa((await almacen("archivos", "readwrite")).put(blob, docId));
+}
+
+export async function obtenerArchivo(docId) {
+  return promesa((await almacen("archivos")).get(docId));
+}
+
+async function borrarVisual(docId) {
+  const db = await abrir();
+  const tx = db.transaction(["diapositivas", "archivos"], "readwrite");
+  tx.objectStore("diapositivas").delete(IDBKeyRange.bound(`${docId}|`, `${docId}|\uffff`));
+  tx.objectStore("archivos").delete(docId);
   await finTransaccion(tx);
 }
 
