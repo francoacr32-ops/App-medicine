@@ -10,7 +10,7 @@ import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esI
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
-import { pref, guardarPref, htmlMiniatura, imagenAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, puntosYNivel, textoPuntos } from "./inicio.js";
+import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, puntosYNivel, textoPuntos } from "./inicio.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -290,7 +290,8 @@ async function vistaTemas(filtro) {
     const preg = suyos.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     lista += `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
       <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
-      <span class="sub">${suyos.length ? `${c} conferencias y talleres${preg ? ` · ${preg} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
+      ${descripcionAsignatura(a.nombre, a.anio) ? `<span class="asig-desc">${esc(descripcionAsignatura(a.nombre, a.anio))}</span>` : ""}
+      <span class="asig-cuenta">${suyos.length ? `${c} conferencias y talleres${preg ? ` · ${preg} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
       ${ico("chevron", "flecha-der")}</a>`;
   }
   poner("Temas", `
@@ -457,7 +458,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 1.8 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 1.8.1 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -572,7 +573,8 @@ async function vistaAnio(anio) {
     const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
       <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
-      <span class="sub">${c || l ? `${c} conferencias y talleres${l ? ` · ${l} libros` : ""}${preguntas ? ` · ${preguntas} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
+      ${descripcionAsignatura(a.nombre, a.anio) ? `<span class="asig-desc">${esc(descripcionAsignatura(a.nombre, a.anio))}</span>` : ""}
+      <span class="asig-cuenta">${c || l ? `${c} conferencias y talleres${l ? ` · ${l} libros` : ""}${preguntas ? ` · ${preguntas} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
       ${ico("chevron", "flecha-der")}</a>`;
   };
   let secciones = "";

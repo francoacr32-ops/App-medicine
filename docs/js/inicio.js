@@ -187,3 +187,32 @@ export function puntosYNivel({ correctas, temasDominados, examenes, racha }) {
 export function textoPuntos(p) {
   return p >= 1000 ? (p / 1000).toFixed(1).replace(".0", "") + "k" : String(p);
 }
+
+// ---------- Descripción corta de cada asignatura (como en el diseño) ----------
+const DESCRIPCIONES = [
+  ["ontogenia", "Desarrollo del embrión y sistema osteomioarticular"],
+  ["celula", "La célula, los tejidos básicos y la piel"],
+  ["molecular", "Biomoléculas, ADN, ARN y síntesis de proteínas"],
+  ["nervioso", "Estructura y función de los sistemas nervioso, endocrino y reproductor"],
+  ["metabol", "Cómo el cuerpo obtiene y usa la energía de los alimentos"],
+  ["sangre", "La sangre y las defensas del organismo"],
+  ["cardiovascular", "Corazón, respiración, digestión y riñones"],
+  ["psicolog", "La conducta humana y la relación médico-paciente"],
+  ["genetic", "La herencia y las enfermedades genéticas"],
+  ["microbiolog", "Bacterias, virus, hongos y parásitos"],
+  ["medicina interna", "Diagnóstico y tratamiento de las enfermedades del adulto"],
+  ["propedeutica", "El interrogatorio, el examen físico y los síntomas"],
+  ["pediatr", "La salud del niño y del adolescente"],
+  ["ginecolog", "Salud de la mujer, embarazo y parto"],
+  ["cirug", "Enfermedades que se tratan con operación"],
+  ["oftalmolog", "Los ojos y la visión"],
+  ["comunidad", "La atención médica en el consultorio y el área de salud"],
+  ["salud publica", "La salud de la población y la prevención"],
+  ["tecnologia", "La ciencia y la tecnología en la sociedad"],
+];
+export function descripcionAsignatura(nombre, anio) {
+  const n = sinTildes(nombre).toLowerCase();
+  if (n.includes("medicina general integral"))
+    return Number(anio) === 6 ? "El internado en la atención primaria de salud" : "Atención primaria a la persona, la familia y la comunidad";
+  return DESCRIPCIONES.find(([c]) => n.includes(c))?.[1] || "";
+}
