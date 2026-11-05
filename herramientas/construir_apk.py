@@ -34,11 +34,13 @@ ATTR = {
     "exported": 0x01010010, "authorities": 0x01010018, "grantUriPermissions": 0x0101001B,
     "configChanges": 0x0101001F, "minSdkVersion": 0x0101020C, "versionCode": 0x0101021B,
     "versionName": 0x0101021C, "windowSoftInputMode": 0x0101022B, "targetSdkVersion": 0x01010270,
-    "allowBackup": 0x01010280, "hardwareAccelerated": 0x010102D3,
+    "allowBackup": 0x01010280, "hardwareAccelerated": 0x010102D3, "drawable": 0x01010199,
 }
 NS_ANDROID = "http://schemas.android.com/apk/res/android"
 TEMA = 0x01030241          # @android:style/Theme.Material.Light.NoActionBar
 ICONO = 0x7F010000         # @drawable/icono (lo define resources.arsc)
+ICONO_FONDO = 0x7F010001   # @drawable/icono_fondo  (capa de fondo del ícono adaptable)
+ICONO_FRENTE = 0x7F010002  # @drawable/icono_frente (capa del dibujo del ícono adaptable)
 
 # Tipos de valor (Res_value)
 T_REF, T_STR, T_DEC, T_HEX, T_BOOL = 0x01, 0x03, 0x10, 0x11, 0x12
@@ -180,24 +182,60 @@ def manifiesto(version_code, version_name):
 
 
 # ---------------------------------------------------------------- resources.arsc
-def arsc(ruta_icono):
-    valores = pool_cadenas([ruta_icono])
+def icono_adaptable():
+    """XML binario de <adaptive-icon>: Android 8+ recorta el ícono con la forma del teléfono."""
+    return axml(Elemento("adaptive-icon", [], [
+        Elemento("background", [a("drawable", T_REF, ICONO_FONDO)]),
+        Elemento("foreground", [a("drawable", T_REF, ICONO_FRENTE)]),
+    ]))
+
+
+def arsc():
+    """resources.arsc con tres imágenes (tipo drawable):
+    icono        → res/drawable/icono.png (Android 5 a 7) y res/drawable-anydpi-v26/icono.xml (Android 8+)
+    icono_fondo  → res/drawable/icono_fondo.png
+    icono_frente → res/drawable/icono_frente.png
+    """
+    rutas = ["res/drawable/icono.png", "res/drawable/icono_fondo.png", "res/drawable/icono_frente.png",
+             "res/drawable-anydpi-v26/icono.xml"]
+    valores = pool_cadenas(rutas)
     tipos = pool_cadenas(["drawable"])
-    claves = pool_cadenas(["icono"])
-    spec = struct.pack("<HHIBBHI", 0x0202, 16, 16 + 4, 1, 0, 0, 1) + struct.pack("<I", 0)
-    config = struct.pack("<I", 64) + b"\x00" * 60
-    cab_tipo = 8 + 1 + 1 + 2 + 4 + 4 + len(config)
-    entradas_inicio = cab_tipo + 4
-    entrada = struct.pack("<HHI", 8, 0, 0) + struct.pack("<HBBI", 8, 0, T_STR, 0)
-    tipo = struct.pack("<HHIBBHII", 0x0201, cab_tipo, entradas_inicio + len(entrada), 1, 0, 0, 1, entradas_inicio) + \
-        config + struct.pack("<I", 0) + entrada
+    nombres = ["icono", "icono_fondo", "icono_frente"]
+    claves = pool_cadenas(nombres)
+    n = len(nombres)
+    # Spec: la entrada 0 cambia según la versión de Android (CONFIG_VERSION) y la densidad
+    spec = struct.pack("<HHIBBHI", 0x0202, 16, 16 + 4 * n, 1, 0, 0, n) + struct.pack("<III", 0x0400 | 0x0100, 0, 0)
+
+    def config(densidad=0, sdk=0):
+        c = bytearray(64)
+        struct.pack_into("<I", c, 0, 64)
+        struct.pack_into("<H", c, 14, densidad)     # density
+        struct.pack_into("<H", c, 24, sdk)          # sdkVersion
+        return bytes(c)
+
+    def chunk_tipo(cfg, valores_por_entrada):
+        cab = 8 + 1 + 1 + 2 + 4 + 4 + len(cfg)
+        offsets, datos = [], b""
+        for v in valores_por_entrada:
+            if v is None:
+                offsets.append(0xFFFFFFFF)
+                continue
+            k, idx_valor = v
+            offsets.append(len(datos))
+            datos += struct.pack("<HHI", 8, 0, k) + struct.pack("<HBBI", 8, 0, T_STR, idx_valor)
+        inicio = cab + 4 * len(offsets)
+        return struct.pack("<HHIBBHII", 0x0201, cab, inicio + len(datos), 1, 0, 0, len(offsets), inicio) + \
+            cfg + b"".join(struct.pack("<I", o) for o in offsets) + datos
+
+    por_defecto = chunk_tipo(config(), [(0, 0), (1, 1), (2, 2)])
+    android8 = chunk_tipo(config(densidad=0xFFFE, sdk=26), [(0, 3), None, None])   # drawable-anydpi-v26
     nombre = PAQUETE.encode("utf-16-le").ljust(256, b"\x00")
     cab_paq = 288
     off_tipos = cab_paq
     off_claves = off_tipos + len(tipos)
-    cuerpo = tipos + claves + spec + tipo
+    cuerpo = tipos + claves + spec + por_defecto + android8
     paquete = struct.pack("<HHII", 0x0200, cab_paq, cab_paq + len(cuerpo), 0x7F) + nombre + \
-        struct.pack("<IIIII", off_tipos, 1, off_claves, 1, 0) + cuerpo
+        struct.pack("<IIIII", off_tipos, 1, off_claves, n, 0) + cuerpo
     total = 12 + len(valores) + len(paquete)
     return struct.pack("<HHII", 0x0002, 12, total, 1) + valores + paquete
 
@@ -276,8 +314,12 @@ def main():
     sin_firmar = tmp / "sin-firmar.apk"
     with zipfile.ZipFile(sin_firmar, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("AndroidManifest.xml", axml(manifiesto(args.version_code, args.version_name)))
-        z.writestr(zipfile.ZipInfo("resources.arsc"), arsc("res/drawable/icono.png"), compress_type=zipfile.ZIP_STORED)
+        z.writestr(zipfile.ZipInfo("resources.arsc"), arsc(), compress_type=zipfile.ZIP_STORED)
         z.write(RAIZ / "docs" / "iconos" / "icono-192.png", "res/drawable/icono.png", compress_type=zipfile.ZIP_STORED)
+        # Ícono adaptable (Android 8+): fondo + dibujo, que el teléfono recorta con su forma
+        z.write(RAIZ / "android" / "res" / "icono_fondo.png", "res/drawable/icono_fondo.png", compress_type=zipfile.ZIP_STORED)
+        z.write(RAIZ / "android" / "res" / "icono_frente.png", "res/drawable/icono_frente.png", compress_type=zipfile.ZIP_STORED)
+        z.writestr("res/drawable-anydpi-v26/icono.xml", icono_adaptable())
         z.write(dex, "classes.dex")
         for f in sorted((RAIZ / "docs").rglob("*")):
             if f.is_file():
