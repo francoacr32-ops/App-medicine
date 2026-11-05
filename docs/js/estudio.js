@@ -57,10 +57,10 @@ export function preguntasDelRepaso(docs, respuestas, maximo = 15, nuevasMax = 5)
 }
 
 // ---------- Modo examen ----------
-export function barajar(lista) {
+export function barajar(lista, azar = Math.random) {
   const a = [...lista];
   for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(azar() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;

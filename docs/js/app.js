@@ -14,7 +14,10 @@ import { activarZoom } from "./zoom.js";
 import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, favoritos, esFavorito, alternarFavorito, textoPuntos } from "./inicio.js";
 import * as juego from "./logros.js";
 import * as tiempo from "./tiempo.js";
-import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
+import * as organizar from "./organizar.js";
+import * as tarjetas from "./tarjetas.js";
+import * as notas from "./notas.js";
+import { barajar, metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
 const $app = document.getElementById("app");
@@ -67,7 +70,8 @@ function resaltar(texto, patrones) {
   return html + esc(texto.slice(pos));
 }
 
-const ICONO = { libro: "📕", conferencia: "📝", taller: "🛠️" };
+const ICONO = { libro: "📕", conferencia: "📝", taller: "🛠️", consulta: "📘" };
+const esLibro = (d) => d.tipo === "libro" || d.tipo === "consulta";
 const icono = (doc) => ICONO[doc.tipo] || "📝";
 
 function cita(doc, etiqueta, pagina) {
@@ -379,7 +383,7 @@ async function vistaTemas(filtro) {
       lista += `<div class="titulo-seccion"><h2>${ANIOS[a.anio - 1]}</h2><a href="#/anio/${a.anio}">Ver año ${ico("chevron")}</a></div>`;
     }
     const suyos = docs.filter((d) => d.asignaturas.includes(a.id));
-    const c = suyos.filter((d) => d.tipo !== "libro").length;
+    const c = suyos.filter((d) => !esLibro(d)).length;
     const preg = suyos.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     const imgA = imagenAsignatura(a.nombre, a.anio);
     lista += `<a class="tema-tarjeta" href="${enlaceAsig(a.id)}">
@@ -608,6 +612,105 @@ function graficaActividad(dias, nDias) {
     ${svg}${linea}${toques}</svg>`;
 }
 
+// ---------- Tarjetas de memoria ----------
+const cacheTarjetas = new Map(); // docId → tarjetas automáticas de las definiciones
+async function tarjetasDelAmbito(asigFiltro) {
+  const docs = (await db.listarDocumentos()).filter((d) => asigFiltro === "todas" || d.asignaturas.includes(asigFiltro));
+  const todas = [];
+  for (const d of docs) {
+    todas.push(...tarjetas.tarjetasDePreguntas(d, textoRespuesta));
+    if (!d.paginas) continue;
+    if (!cacheTarjetas.has(d.id)) {
+      const porPagina = new Map();
+      for (const f of await db.fragmentosDe(d.id)) porPagina.set(f.pagina, (porPagina.get(f.pagina) || "") + "\n" + f.texto);
+      cacheTarjetas.set(d.id, tarjetas.tarjetasDeDefiniciones(d, [...porPagina.entries()].map(([pagina, texto]) => ({ pagina, texto }))));
+    }
+    todas.push(...cacheTarjetas.get(d.id));
+  }
+  return { todas, docs };
+}
+
+async function vistaTarjetas(asigFiltro = "todas") {
+  if (!asigFiltro) asigFiltro = "todas";
+  const { todas, docs } = await tarjetasDelAmbito(asigFiltro);
+  const asigs = (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id)) || asigFiltro !== "todas");
+  const { lista, pendientes, nuevasTotal } = tarjetas.mazoDeHoy(todas, db.hoy());
+  const est = tarjetas.estadoTarjetas(todas);
+  const chips = [["todas", "Todas"], ...(await db.listarAsignaturas()).filter((a) => a.id === asigFiltro || asigs.some((x) => x.id === a.id))
+    .map((a) => [a.id, a.nombre])].map(([v, t]) => `<a class="chip-filtro ${v === asigFiltro ? "activo" : ""}" href="#/tarjetas/${encodeURIComponent(v)}">${esc(t)}</a>`).join("");
+  vistaTarjetas.sesion = { lista, k: 0, docs, bien: 0, total: lista.length };
+  poner("Tarjetas de memoria", `
+    <nav class="filtros">${chips}</nav>
+    <div class="flash-estado"><span><b>${lista.length}</b> para hoy</span><span>${pendientes} de repaso · ${Math.min(20, nuevasTotal)} nuevas</span>
+      <span>${est.dominadas} de ${est.total} dominadas</span></div>
+    ${lista.length ? `<div id="flash"></div>` : `<div class="panel centro"><p class="grande">🎉 ¡Al día con las tarjetas!</p>
+      <p>${est.total ? "Vuelve mañana: Finlay te mostrará las que toca repasar." : "Todavía no hay tarjetas. Salen solas de los cuestionarios y de las definiciones de las conferencias."}</p></div>`}
+    <p class="nota">Las tarjetas salen de los cuestionarios y, automáticamente, de las definiciones de tus conferencias. Las que fallas vuelven pronto; las que sabes, dentro de unos días.</p>`, "#/evaluaciones");
+  if (lista.length) pintarTarjeta();
+}
+function pintarTarjeta(girada = false) {
+  const ses = vistaTarjetas.sesion;
+  const caja = document.getElementById("flash");
+  if (!ses || !caja) return;
+  if (ses.k >= ses.lista.length) {
+    caja.innerHTML = `<div class="panel centro"><p class="grande">🎉 ¡Terminaste las tarjetas de hoy!</p>
+      <p>${ses.bien} de ${ses.total} las sabías bien.</p><a class="btn" href="#/evaluaciones">Volver</a></div>`;
+    juego.avisoLogro("Tarjetas de hoy", `${ses.total} tarjetas repasadas`, "🗂️", "nivel");
+    return;
+  }
+  const t = ses.lista[ses.k];
+  const doc = ses.docs.find((d) => d.id === t.docId);
+  const pag = Number((t.fuente.match(/\d+/) || [])[0]) || 0;
+  caja.innerHTML = `<div class="flash-progreso"><span class="barra-progreso"><span class="en-camino" style="width:${(ses.k / ses.lista.length) * 100}%"></span></span>
+      <span>${ses.k + 1} / ${ses.lista.length}</span></div>
+    <button class="flash-carta ${girada ? "girada" : ""}" data-accion="flash-girar" aria-label="Girar la tarjeta">
+      <span class="flash-cara flash-frente"><span class="flash-tipo">${t.origen === "definicion" ? "Definición · automática" : "De tu cuestionario"}</span>
+        <span class="flash-texto">${esc(t.frente).replace(/\n/g, "<br>")}</span><span class="sub">Toca para ver la respuesta</span></span>
+      <span class="flash-cara flash-dorso"><span class="flash-tipo">Respuesta</span><span class="flash-texto">${esc(t.dorso)}</span>
+        ${doc ? `<span class="sub">📌 ${esc(doc.nombre)}${t.fuente ? `, ${esc(t.fuente)}` : ""}</span>` : ""}</span>
+    </button>
+    ${girada ? `<div class="flash-botones">${[["Otra vez", 0, "rojo"], ["Difícil", 1, "naranja"], ["Bien", 2, "verde"], ["Fácil", 3, "azul"]].map(([txt, n, c]) =>
+      `<button class="flash-nota ${c}" data-accion="flash-nota" data-n="${n}"><b>${txt}</b><span>${tarjetas.proximoTexto(n, t.id)}</span></button>`).join("")}</div>
+      ${doc && pag ? `<a class="btn mini secundario flash-ver" href="#/doc/${doc.id}?p=${pag}">${ico("conferencia")} Verla en la conferencia</a>` : ""}`
+      : `<button class="btn ancho" data-accion="flash-girar">Mostrar respuesta</button>`}`;
+}
+
+// ---------- Mis notas (notas y diapositivas marcadas) ----------
+async function vistaNotas() {
+  const todas = notas.todasLasNotas();
+  const docs = await db.listarDocumentos();
+  const porDoc = new Map();
+  for (const n of todas) {
+    const d = docs.find((x) => x.id === n.docId);
+    if (!d) continue;
+    if (!porDoc.has(d)) porDoc.set(d, []);
+    porDoc.get(d).push(n);
+  }
+  poner("Mis notas", porDoc.size ? [...porDoc.entries()].map(([d, lista]) => `<h2>${esc(d.nombre)}</h2>
+      ${lista.sort((a, b) => a.n - b.n).map((n) => `<a class="tarjeta nota-item" href="#/doc/${d.id}?p=${n.n}">
+        <span class="nota-item-cab">${n.m ? `<span class="estrella">★</span>` : ""}<b>${d.etiqueta === "pág." && !d.diapositivas ? "Página" : "Diapositiva"} ${n.n}</b>
+          <span class="sub">${new Date(n.f).toLocaleDateString("es")}</span></span>
+        ${n.t ? `<span class="nota-item-texto">${esc(n.t).replace(/\n/g, "<br>")}</span>` : `<span class="sub">Marcada como importante</span>`}</a>`).join("")}`).join("")
+    : `<div class="panel centro"><p class="grande">✏️ Todavía no tienes notas</p>
+       <p>En cualquier diapositiva toca <b>✏️</b> para escribir una nota o <b>☆</b> para marcarla como importante. Aquí las verás todas.</p></div>`, "#/perfil");
+}
+
+// ---------- Atlas de imágenes ----------
+async function vistaAtlas() {
+  const docs = await db.listarDocumentos();
+  const vistas = new Map();
+  for (const d of docs) (d.cuestionario || []).forEach((p) => {
+    if (p.imagen && !vistas.has(p.imagen)) vistas.set(p.imagen, { id: p.imagen, pie: p.pie || "", d });
+  });
+  const lista = [...vistas.values()];
+  poner("Atlas de imágenes", `
+    <p class="sub">${lista.length} imágenes de tus materiales (láminas, esquemas y cortes). Toca una para ampliarla.</p>
+    ${lista.length ? `<div class="atlas">${lista.map((x) => `<figure class="atlas-item">
+        <img data-img="${esc(x.id)}" alt="${esc(x.pie || "Imagen")}" data-accion="ampliar" loading="lazy">
+        <figcaption>${x.pie ? `<b>${esc(x.pie)}</b>` : ""}<span>${esc(x.d.asignaturas[0].split("|")[1])} · <a href="#/doc/${x.d.id}">${esc(x.d.nombre)}</a></span></figcaption></figure>`).join("")}</div>`
+      : `<div class="panel centro"><p>Todavía no hay imágenes. Llegan con los paquetes de Claude (preguntas de «señale»).</p></div>`}`, "#/biblioteca");
+}
+
 // ---------- Pantalla: Evaluaciones (repaso, examen y plan) ----------
 async function vistaEvaluaciones() {
   const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
@@ -615,7 +718,7 @@ async function vistaEvaluaciones() {
   const planes = (await db.listarPlanes()).filter((p) => diasHasta(p.fecha) >= 0).sort((a, b) => a.fecha.localeCompare(b.fecha));
   const examenes = (await db.listarExamenes()).sort((a, b) => b.fecha - a.fecha);
   const tarjeta = (href, img, color, titulo, sub) => `<a class="eval-tarjeta" href="${href}" style="--c:${color}">
-      <img class="eval-ico" src="iconos/dis/${img}.webp" alt="">
+      ${img.startsWith("emoji:") ? `<span class="eval-ico eval-emoji">${img.slice(6)}</span>` : `<img class="eval-ico" src="iconos/dis/${img}.webp" alt="">`}
       <span class="eval-texto"><b>${titulo}</b><span>${sub}</span></span>
       <span class="flecha-circulo">${ico("chevron")}</span></a>`;
   const NOTA = { 5: "Excelente", 4: "Bien", 3: "Aprobado", 2: "Desaprobado" };
@@ -628,6 +731,8 @@ async function vistaEvaluaciones() {
     </section>
     ${tarjeta("#/repaso", "ev-repaso", "#14b8c4", "Repaso del día", lista.length ? `${lista.length} pregunta${lista.length === 1 ? "" : "s"} te esperan hoy` : "¡Estás al día! Vuelve mañana")}
     ${tarjeta("#/examen", "ev-examen", "#2f7ff0", "Examen de práctica", "Con cronómetro y nota de 2 a 5")}
+    ${tarjeta("#/tarjetas", "emoji:🗂️", "#13bfa0", "Tarjetas de memoria", "Repaso rápido: pregunta por un lado, respuesta por el otro")}
+    ${tarjeta("#/examen/reto", "emoji:🤝", "#f2962e", "Reto con un compañero", "El mismo examen para los dos, con un código")}
     ${tarjeta("#/planes", "ev-plan", "#9b4fe0", "Plan para el examen", planes.length ? `${esc(planes[0].nombre)}: ${textoDias(diasHasta(planes[0].fecha))}` : "Pon la fecha de tu próxima prueba")}
     <div class="titulo-seccion"><h2>Tus últimas notas</h2>${examenes.length ? `<a class="pildora-enlace" href="#/examen">Ver historial ${ico("chevron")}</a>` : ""}</div>
     ${examenes.length ? examenes.slice(0, 3).map((e) => `<div class="nota-tarjeta n${e.nota}">
@@ -665,6 +770,7 @@ async function vistaPerfil() {
     </div>
     <nav class="menu-cristal">
       ${filaCristal("#/progreso", "barras", "Mi progreso")}
+      ${filaCristal("#/notas", "lapiz", "Mis notas", notas.todasLasNotas().length ? `<span class="globo">${notas.todasLasNotas().length}</span>` : "")}
       ${filaCristal("#/biblioteca/favoritos", "corazon", "Mis favoritos", favoritos().length ? `<span class="globo">${favoritos().length}</span>` : "")}
       ${filaCristal("#/copia", "documento", "Copia y compartir")}
       ${filaCristal("#/planes", "calendario", "Plan para el examen")}
@@ -719,7 +825,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 2.1.1 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 2.2 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -798,7 +904,7 @@ const PESTANAS = [
 ];
 const SECCION_DE_RUTA = {
   "": "inicio", temas: "temas", anio: "temas", asig: "temas", buscar: "temas",
-  biblioteca: "biblioteca", doc: "biblioteca", leer: "biblioteca",
+  biblioteca: "biblioteca", doc: "biblioteca", leer: "biblioteca", atlas: "biblioteca", tarjetas: "evaluaciones", notas: "perfil",
   evaluaciones: "evaluaciones", repaso: "evaluaciones", examen: "evaluaciones", "examen-hacer": "evaluaciones", planes: "evaluaciones", plan: "evaluaciones",
   perfil: "perfil", progreso: "perfil", copia: "perfil", ayuda: "perfil", ajustes: "perfil",
 };
@@ -829,7 +935,7 @@ async function vistaAnio(anio) {
   const asigs = await db.listarAsignaturas(anio);
   const tarjeta = async (a) => {
     const docs = await db.documentosDeAsignatura(a.id);
-    const c = docs.filter((d) => d.tipo !== "libro").length;
+    const c = docs.filter((d) => !esLibro(d)).length;
     const l = docs.length - c;
     const preguntas = docs.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
     return `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
@@ -868,7 +974,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
   const docs = (await db.documentosDeAsignatura(id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
   if (pestana === "progreso") return vistaProgreso(asig, docs);
   const tipo = pestana === "libros" ? "libro" : "conferencia";
-  const lista = docs.filter((d) => (tipo === "libro" ? d.tipo === "libro" : d.tipo !== "libro"));
+  const lista = docs.filter((d) => (tipo === "libro" ? esLibro(d) : !esLibro(d)));
 
   const items = lista
     .map(
@@ -885,7 +991,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
 
   const otrosLibros =
     tipo === "libro"
-      ? (await db.listarDocumentos()).filter((d) => d.tipo === "libro" && !d.asignaturas.includes(id))
+      ? (await db.listarDocumentos()).filter((d) => esLibro(d) && !d.asignaturas.includes(id))
       : [];
 
   poner(
@@ -901,6 +1007,10 @@ async function vistaAsignatura(id, pestana = "conferencias") {
        <a href="${enlaceAsig(id)}/progreso">Progreso</a>
      </nav>
      <ul class="docs">${items || `<li class="vacio">No hay ${tipo === "libro" ? "libros" : "conferencias"} todavía.</li>`}</ul>
+     ${tipo === "libro" && organizar.librosDe(asig.nombre).length ? `<section class="libros-texto"><p class="grande">${ico("libro")} Libros de texto (ECIMED)</p>
+       ${organizar.librosDe(asig.nombre).map((l) => `<div class="libro-texto"><b>${esc(l.titulo)}</b><span class="sub">${esc(l.autor)}${l.porConfirmar ? " · por confirmar" : ""}</span></div>`).join("")}
+       <p class="nota">Cuando tengas el PDF, toca <b>Añadir materiales</b> en la Biblioteca: Finlay lo reconoce y lo pone aquí solo.</p>
+       <button class="btn ancho secundario" data-accion="anadir">${ico("cargar")} Añadir un libro</button></section>` : ""}
      <button class="btn ancho solo-manual" data-accion="cargar" data-asig="${esc(id)}" data-tipo="${tipo}">
        ＋ Cargar ${tipo === "libro" ? "libros" : "conferencias"} (PDF, Word, PowerPoint)</button>
      ${otrosLibros.length ? `<details class="compartir"><summary>📚 Usar un libro que ya cargaste en otra asignatura</summary>
@@ -1014,7 +1124,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
   if (pestana !== "cuestionario") pestana = "conferencia";
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
-  const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
+  const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "consulta" ? "Consulta" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
   const nPreg = doc.cuestionario?.length || 0;
   const pestanas = `<nav class="pestanas">
       <a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${nombreTipo}</a>
@@ -1031,6 +1141,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
   } else if (tieneVisual(doc)) {
     // Diapositivas con su formato original, una debajo de otra como en un lector de PDF
     const total = totalPaginas(doc);
+    const misNotas = notas.notasDe(doc.id);
     const palabra = doc.etiqueta === "diap." || doc.diapositivas ? "Diapositiva" : "Página";
     cuerpo = `<div class="avance-diapo" data-total="${total}" data-doc="${doc.id}">
         <span class="barra-progreso"><span class="en-camino" id="avance-barra" style="width:${(100 / total).toFixed(1)}%"></span></span>
@@ -1040,7 +1151,11 @@ async function vistaDoc(docId, pestana, irA = 0) {
         <figure class="diapo" id="d${n}">
           <img data-diapo="${n}" alt="${palabra} ${n}" data-accion="ampliar" width="960" height="720">
           <figcaption><span>${palabra} ${n}</span>
-            <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar la ${palabra.toLowerCase()} ${n}">${ico("voz")}</button></figcaption>
+            <span class="diapo-botones">
+              <button class="btn-icono mini-voz marca-diapo ${misNotas[n]?.m ? "activa" : ""}" data-accion="marcar-diapo" data-n="${n}" aria-label="Marcar como importante">${misNotas[n]?.m ? "★" : "☆"}</button>
+              <button class="btn-icono mini-voz" data-accion="nota-diapo" data-n="${n}" aria-label="Escribir una nota">${ico("lapiz")}</button>
+              <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar la ${palabra.toLowerCase()} ${n}">${ico("voz")}</button></span></figcaption>
+          ${misNotas[n]?.t ? `<div class="diapo-nota">✏️ ${esc(misNotas[n].t).replace(/\n/g, "<br>")}</div>` : ""}
         </figure>`).join("")}</div>`;
   } else if (doc.paginas) {
     // Sin imagen (Word o PowerPoint cargado desde el teléfono): el texto de cada página en una tarjeta
@@ -1069,7 +1184,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
     `<div class="doc-cabeza"><p class="migas">${esc(doc.asignaturas.map(nombreAsig).join(" · "))}</p>
       <button class="btn-fav ${esFavorito(doc.id) ? "activo" : ""}" data-accion="favorito" data-id="${doc.id}" aria-pressed="${esFavorito(doc.id)}" aria-label="Guardar en favoritos">${ico("corazon")}</button></div>${pestanas}${cuerpo}
      ${pestana === "conferencia" && doc.paginas ? `<button class="btn mini abajo solo-manual" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto para Claude</button>` : ""}`,
-    enlaceAsig(asigActual) + (doc.tipo === "libro" ? "/libros" : "")
+    enlaceAsig(asigActual) + (esLibro(doc) ? "/libros" : "")
   );
   vistaDoc.doc = doc;
   if (pestana === "cuestionario") iniciarSesion(false);
@@ -1145,6 +1260,7 @@ function htmlTarjeta(k, previa = null, conOrigen = false) {
   const titulo = conOrigen ? `${k + 1}. ${esc(doc.nombre)} · ${NOMBRE_TIPO[p.tipo]}` : `${i + 1}. ${NOMBRE_TIPO[p.tipo]}`;
   return `<article class="pregunta" id="p${k}">
     <p class="sub">${titulo}${previa ? ` · la última vez: ${previa.ultima ? "✅" : "❌"}` : ""}</p>
+    ${p.caso ? `<div class="caso-clinico"><b>🩺 Caso clínico</b><p>${esc(p.caso)}</p></div>` : ""}
     <p class="enunciado">${htmlEnunciado(p)}</p>
     ${htmlFigura(p.imagen, p.pie)}
     <div class="opciones">${htmlOpciones(p, k)}</div>
@@ -1162,10 +1278,15 @@ function mostrarCorreccion(k, r, sinResponder = false) {
   caja.classList.toggle("es-incorrecta", !r.correcta && !sinResponder);
   caja.innerHTML = `<b class="correccion-titulo">${titulo}</b> <span class="correccion-texto">${esc(textoRespuesta(p))}</span>
     ${p.explicacion ? `<p>${esc(p.explicacion)}</p>` : ""}
+    ${Array.isArray(p.porque) && p.opciones ? `<ul class="porque">${p.opciones.map((o, j) => {
+      const ok = p.tipo === "multiple" ? j === p.correcta : (p.correctas || []).includes(j);
+      return p.porque[j] ? `<li class="${ok ? "si" : "no"}"><b>${ok ? "✔" : "✖"} ${"ABCDEFGHIJ"[j]})</b> ${esc(p.porque[j])}</li>` : "";
+    }).join("")}</ul>` : ""}
     ${p.fuente ? `<p class="fuente">📌 Fuente: ${esc(doc.nombre)}, ${esc(p.fuente)}</p>` : ""}
     <div class="acciones">
       ${!r.correcta ? botonGuia(k) : ""}
       <button class="btn mini" data-accion="leer-explicacion" data-i="${k}">🔊 Escuchar</button>
+      <button class="btn mini secundario" data-accion="reportar" data-i="${k}">⚠ Reportar error</button>
     </div>`;
   caja.hidden = false;
 }
@@ -1488,6 +1609,12 @@ async function vistaExamenInicio(ambitoInicial) {
           <label class="check"><input type="checkbox" name="momento" ${pref("examenMomento", "1") === "1" ? "checked" : ""}> Corregir cada respuesta al momento (con sonido al acertar o fallar)</label>
           <button class="btn ancho">📝 Empezar examen</button>
         </form>
+        <section class="panel reto" id="reto">
+          <p class="grande">🤝 Reto con un compañero</p>
+          <p class="sub">Los dos hacen <b>el mismo examen</b> (mismas preguntas) y comparan la nota. Tu compañero debe tener los mismos materiales en Finlay.</p>
+          <button class="btn ancho secundario" data-accion="reto-crear">Crear un reto con lo elegido arriba</button>
+          <form class="fila-reto" data-form="reto"><input name="codigo" placeholder="Escribe el código del reto" autocomplete="off" required><button class="btn">Aceptar</button></form>
+        </section>
         <p class="nota">Si quitas «Corregir al momento», el examen es como el real: no sabes si fallaste hasta entregar. Nota según la escala cubana: 5 Excelente (90 % o más), 4 Bien (80 %), 3 Aprobado (70 %), 2 Desaprobado.</p>
         ${historial.length ? `<h2>Tus últimos exámenes</h2><ul class="docs">${historial
           .map((e) => `<li class="doc"><span><b class="nota-num n${e.nota}">${e.nota}</b> ${esc(e.titulo)}</span>
@@ -1497,7 +1624,8 @@ async function vistaExamenInicio(ambitoInicial) {
     "#/"
   );
   const sel = $app.querySelector("select[name=ambito]");
-  if (sel && ambitoInicial) sel.value = ambitoInicial;
+  if (ambitoInicial === "reto") document.getElementById("reto")?.scrollIntoView({ block: "start" });
+  else if (sel && ambitoInicial) sel.value = ambitoInicial;
 }
 
 let relojExamen = null;
@@ -1508,12 +1636,13 @@ async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   vistaExamen.alMomento = alMomento;
   resultadosExamen.clear();
   const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length);
-  const lista = preguntasDeExamen(docs, cantidad);
+  // En un reto, el orden sale del código: los dos teléfonos eligen las mismas preguntas
+  const lista = vistaExamen.reto ? preguntasDelReto(docs, cantidad, vistaExamen.reto) : preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
   modo = "examen";
   enPantalla = lista;
   elegidasExamen.clear();
-  const titulo = `Examen de ${nombreAmbito(ambito)}`;
+  const titulo = `${vistaExamen.reto ? "Reto" : "Examen"} de ${nombreAmbito(ambito)}`;
   alResponder = () => contarExamen();
   poner(
     "Examen",
@@ -1613,10 +1742,57 @@ async function entregarExamen() {
         .join("")}</ul>` : "<p>¡Sin fallos! 🎉</p>"}
       <p class="nota">Abajo puedes ver la corrección de cada pregunta.</p>
       <a class="btn" href="#/examen/${encodeURIComponent(ambito)}">Hacer otro examen</a>
+      ${vistaExamen.reto ? `<div class="reto-resultado"><p><b>🤝 Reto ${esc(vistaExamen.reto)}</b>: sacaste <b>${n.nota}</b> (${porcentaje} %).</p>
+        <button class="btn" data-accion="reto-compartir" data-texto="${esc(`🤝 Reto Finlay ${vistaExamen.reto}: saqué ${n.nota} (${porcentaje} %) en ${nombreAmbito(ambito)}. ¿Te atreves? Abre Finlay → Evaluaciones → Reto y escribe el código.`)}">📤 Compartir mi resultado</button></div>` : ""}
     </div>`;
   window.scrollTo({ top: 0, behavior: "smooth" });
   await terminarPrueba({ titulo, acertadas: bienExamen, total: lista.length, pct: porcentaje, nota: n.nota,
     puntosInicio: vistaExamen.puntosInicio, otraVez: `#/examen/${encodeURIComponent(ambito)}` });
+}
+
+/** Código de reto: preguntas-semilla-ámbito (t = toda la carrera, a3 = 3er año, s2 = 2da asignatura con preguntas) */
+async function codigoDeReto(ambito, n) {
+  const semilla = Math.random().toString(36).slice(2, 7).toUpperCase();
+  let amb = "T";
+  if (ambito.startsWith("anio:")) amb = "A" + ambito.slice(5);
+  else if (ambito !== "todo") {
+    const asigs = await asignaturasConPreguntas();
+    amb = "S" + asigs.findIndex((a) => a.id === ambito);
+  }
+  return `${n}-${semilla}-${amb}`;
+}
+async function asignaturasConPreguntas() {
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  return (await db.listarAsignaturas()).filter((a) => docs.some((d) => d.asignaturas.includes(a.id))).sort((a, b) => a.id.localeCompare(b.id, "es"));
+}
+async function leerCodigoDeReto(codigo) {
+  const m = String(codigo).trim().toUpperCase().replace(/^FINLAY[-\s]*/, "").match(/^(\d{1,2})-([A-Z0-9]{3,8})-(T|A\d|S\d{1,3})$/);
+  if (!m) return null;
+  const [, n, semilla, amb] = m;
+  let ambito = "todo";
+  if (amb[0] === "A") ambito = "anio:" + amb.slice(1);
+  else if (amb[0] === "S") {
+    const a = (await asignaturasConPreguntas())[Number(amb.slice(1))];
+    if (!a) return null;
+    ambito = a.id;
+  }
+  return { n: Number(n), ambito, codigo: `${n}-${semilla}-${amb}` };
+}
+function preguntasDelReto(docs, cantidad, codigo) {
+  // generador de números pseudoaleatorios con semilla (mulberry32): igual en todos los teléfonos
+  let h = 1779033703;
+  for (const c of codigo) h = Math.imul(h ^ c.charCodeAt(0), 3432918353), h = (h << 13) | (h >>> 19);
+  const azar = () => {
+    h += 0x6d2b79f5;
+    let t = h;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const todas = [];
+  [...docs].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))
+    .forEach((d) => (d.cuestionario || []).forEach((p, i) => p.tipo !== "abierta" && todas.push({ doc: d, i })));
+  return barajar(todas, azar).slice(0, cantidad);
 }
 
 // ---------- Pantalla: plan para el examen ----------
@@ -1749,6 +1925,12 @@ async function vistaCopia() {
        <select id="ambito-compartir">${opciones.replace('<option value="todo">Toda la carrera</option>', "")}</select>
        <button class="btn ancho" data-accion="compartir" ${docs.length ? "" : "disabled"}>📤 Compartir</button>
        <p class="nota">Solo se comparten las asignaturas que tienen cuestionarios.</p>
+     </section>
+     <section class="panel">
+       <p class="grande">⚠ Errores reportados</p>
+       <p>${notas.reportes().length ? `Tienes <b>${notas.reportes().length}</b> error${notas.reportes().length === 1 ? "" : "es"} reportado${notas.reportes().length === 1 ? "" : "s"}. Mándaselos a Claude para corregirlos en la próxima versión.` : "Cuando una pregunta tenga un error, toca «⚠ Reportar error» después de responderla."}</p>
+       ${notas.reportes().length ? `<button class="btn ancho" data-accion="reportes-enviar">📤 Enviar los reportes</button>
+         <button class="btn ancho secundario" data-accion="reportes-borrar">Borrar (ya los envié)</button>` : ""}
      </section>
      <section class="panel">
        <p class="grande">📥 Cargar una copia o un paquete</p>
@@ -1887,7 +2069,7 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
   const todos = await db.listarDocumentos();
   const favs = favoritos();
   const FILTROS = [["todo", "Todo", "cuadricula"], ["conferencia", "Conferencias", "conferencia"], ["taller", "Clases taller", "birrete"],
-    ["libro", "Libros", "libro"], ["favoritos", "Favoritos", "corazon"]];
+    ["libro", "Libros", "libro"], ["consulta", "Consulta", "lupa"], ["favoritos", "Favoritos", "corazon"]];
   let docs = todos.filter((d) => (filtro === "todo" || (filtro === "favoritos" ? favs.includes(d.id) : (d.tipo || "conferencia") === filtro))
     && (!asigFiltro || d.asignaturas.includes(asigFiltro)));
   const porNombre = (a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true });
@@ -1918,13 +2100,15 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
       <label>Ordenar por<select data-biblio="orden">${[["nombre", "Nombre"], ["asignatura", "Asignatura"], ["preguntas", "Más preguntas"]].map(([v, t]) =>
         `<option value="${v}" ${v === orden ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     </div>
-    <nav class="filtros filtros-iconos">${FILTROS.map(([v, t, i]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="${enlace(v)}">${ico(i)}${t}</a>`).join("")}</nav>
+    <nav class="filtros filtros-iconos">${FILTROS.map(([v, t, i]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="${enlace(v)}">${ico(i)}${t}</a>`).join("")}
+      <a class="chip-filtro" href="#/atlas">${ico("imagen")}Atlas</a></nav>
+    <button class="btn-anadir" data-accion="anadir">${ico("cargar")}<span><b>Añadir materiales</b><small>PDF, PowerPoint o Word: Finlay los organiza solo</small></span></button>
     ${asigFiltro ? `<p class="filtro-activo">${ico("ajustes2")} ${esc(asigsConDocs.find((a) => a.id === asigFiltro)?.nombre || "")} · <a href="${enlace(filtro, { asig: "" })}">Quitar filtro</a></p>` : ""}
     ${docs.length ? `<div class="biblio2">${docs.map((d) => {
       const [anio, nombreA] = d.asignaturas[0].split("|");
       const portada = imagenAsignatura(nombreA, anio);
-      const tipo = d.tipo === "libro" ? "Libro" : d.tipo === "taller" ? "Clase taller" : "Conferencia";
-      const icoTipo = d.tipo === "libro" ? "libro" : d.tipo === "taller" ? "birrete" : "conferencia";
+      const tipo = d.tipo === "libro" ? "Libro" : d.tipo === "consulta" ? "Consulta" : d.tipo === "taller" ? "Clase taller" : "Conferencia";
+      const icoTipo = d.tipo === "libro" ? "libro" : d.tipo === "consulta" ? "lupa" : d.tipo === "taller" ? "birrete" : "conferencia";
       const total = totalPaginas(d);
       const unidad = d.diapositivas || d.etiqueta === "diap." ? "diapositivas" : "páginas";
       const icoAsig = (ESTILO_ANIO[Number(anio) - 1] || ESTILO_ANIO[0])[0];
@@ -1974,6 +2158,112 @@ function vistaAyuda() {
 const $archivo = document.getElementById("archivo");
 $archivo.accept = FORMATOS;
 let destinoCarga = null;
+
+/** Guarda un material ya leído (texto extraído) en una asignatura. Devuelve un aviso o "" */
+async function guardarMaterial(archivo, paginas, asigId, tipo, nombre = archivo.name) {
+  const conTexto = paginas.filter((p) => p.texto.replace(/\s/g, "").length > 20);
+  const esPdf = tipoDeArchivo(archivo.name) === "pdf";
+  if (!conTexto.length && !esPdf) throw new Error("No tiene texto que se pueda leer.");
+  const fragmentos = [];
+  for (const p of conTexto)
+    fragmentarPagina(p.texto).forEach((texto, orden) => fragmentos.push({ pagina: p.n, etiqueta: p.etiqueta, orden, texto }));
+  const doc = {
+    id: "d" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    nombre, archivo: archivo.name, tamano: archivo.size, tipo, asignaturas: [asigId],
+    paginas: paginas.length, primera: conTexto[0]?.n ?? 1, pdf: esPdf, etiqueta: paginas[0]?.etiqueta || "pág.",
+    sinTexto: paginas.length - conTexto.length, fecha: Date.now(), origen: "telefono",
+  };
+  await db.guardarDocumento(doc, fragmentos);
+  if (esPdf) await db.guardarArchivo(doc.id, archivo);
+  if (!conTexto.length) return `${nombre}: es un PDF escaneado (fotos). Se puede ver, pero el buscador y las tarjetas no funcionan con él.`;
+  if (doc.sinTexto > paginas.length * 0.3) return `${nombre}: ${doc.sinTexto} de ${paginas.length} páginas no tienen texto (pueden ser escaneadas).`;
+  return "";
+}
+
+/** "Añadir materiales": lee cada archivo, decide solo su asignatura y su tipo, y pide confirmación */
+async function anadirMateriales(archivos) {
+  if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+  const asigs = (await db.listarAsignaturas()).sort((a, b) => a.anio - b.anio || a.nombre.localeCompare(b.nombre, "es"));
+  const existentes = await db.listarDocumentos();
+  const leidos = [];
+  for (const archivo of archivos) {
+    const fila = { archivo, nombre: organizar.nombreLimpio(archivo.name) };
+    try {
+      if (!tipoDeArchivo(archivo.name)) throw new Error("Formato no compatible (usa PDF, PowerPoint o Word).");
+      if (existentes.some((d) => (d.archivo || d.nombre) === archivo.name && d.tamano === archivo.size)) throw new Error("Ya está en Finlay.");
+      mostrarProgreso(`Leyendo ${archivo.name}…`);
+      fila.paginas = await extraerTexto(archivo, (t) => mostrarProgreso(`${archivo.name}\n${t}`));
+      const texto = fila.paginas.slice(0, 12).map((p) => p.texto).join("\n");
+      const { asig, seguridad } = organizar.asignaturaProbable(archivo.name, texto, asigs);
+      Object.assign(fila, { asig: asig?.id || "", seguridad, tipo: organizar.tipoDeMaterial(archivo.name, fila.paginas.length) });
+    } catch (e) {
+      fila.error = e.message;
+    }
+    leidos.push(fila);
+  }
+  mostrarProgreso(null);
+  const elegidos = await confirmarOrganizacion(leidos, asigs);
+  if (!elegidos) return;
+  const avisos = [];
+  let guardados = 0;
+  for (const f of elegidos) {
+    try {
+      mostrarProgreso(`Guardando ${f.nombre}…`);
+      const a = await guardarMaterial(f.archivo, f.paginas, f.asig, f.tipo, f.nombre);
+      if (a) avisos.push(a);
+      guardados++;
+    } catch (e) {
+      avisos.push(`${f.nombre}: ${e?.name === "QuotaExceededError" ? "no queda espacio en el teléfono" : e.message}`);
+    }
+  }
+  mostrarProgreso(null);
+  if (avisos.length) alert(`Guardados: ${guardados}\n\nAvisos:\n• ${avisos.join("\n• ")}`);
+  else aviso(`✅ ${guardados} material${guardados === 1 ? "" : "es"} organizado${guardados === 1 ? "" : "s"}`);
+  location.hash = "#/biblioteca";
+  router();
+}
+
+/** Hoja para revisar lo que Finlay organizó solo (asignatura y tipo de cada archivo) */
+function confirmarOrganizacion(leidos, asigs) {
+  return new Promise((listo) => {
+    const opcionesAsig = (sel) => `<option value="">Elegir asignatura…</option>` + ANIOS.map((t, i) => {
+      const del = asigs.filter((a) => a.anio === i + 1);
+      return del.length ? `<optgroup label="${t}">${del.map((a) => `<option value="${esc(a.id)}" ${a.id === sel ? "selected" : ""}>${esc(a.nombre)}</option>`).join("")}</optgroup>` : "";
+    }).join("");
+    const TIPOS = [["conferencia", "Conferencia"], ["taller", "Clase taller"], ["libro", "Libro"], ["consulta", "Material de consulta"]];
+    const hoja = document.createElement("div");
+    hoja.className = "hoja-organizar";
+    hoja.setAttribute("role", "dialog");
+    hoja.innerHTML = `<div class="hoja-caja">
+      <h2>${ico("estudiar")} Organizar materiales</h2>
+      <p class="sub">Finlay los ordenó solo según su nombre y su contenido. Revisa y toca <b>Guardar</b>.</p>
+      ${leidos.map((f, k) => `<div class="org-fila ${f.error ? "con-error" : f.seguridad >= 0.3 ? "segura" : "duda"}">
+        <b class="org-nombre">${esc(f.nombre)}</b>
+        ${f.error ? `<span class="org-estado">✖ ${esc(f.error)}</span>` : `
+        <span class="org-estado">${f.asig && f.seguridad >= 0.3 ? "✓ Organizado" : f.asig ? "¿Es esta la asignatura?" : "Elige la asignatura"}</span>
+        <label>Asignatura<select data-org-asig="${k}">${opcionesAsig(f.asig)}</select></label>
+        <label>Tipo<select data-org-tipo="${k}">${TIPOS.map(([v, t]) => `<option value="${v}" ${v === f.tipo ? "selected" : ""}>${t}</option>`).join("")}</select></label>`}
+      </div>`).join("")}
+      <div class="hoja-botones"><button class="btn secundario" data-org="cancelar">Cancelar</button>
+        <button class="btn" data-org="guardar" ${leidos.some((f) => !f.error) ? "" : "disabled"}>Guardar</button></div>
+    </div>`;
+    document.body.appendChild(hoja);
+    hoja.addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-org]");
+      if (!b) return;
+      if (b.dataset.org === "cancelar") { hoja.remove(); return listo(null); }
+      const elegidos = [];
+      for (const [k, f] of leidos.entries()) {
+        if (f.error) continue;
+        const asig = hoja.querySelector(`[data-org-asig="${k}"]`).value;
+        if (!asig) { aviso(`Elige la asignatura de «${f.nombre}»`); return; }
+        elegidos.push({ ...f, asig, tipo: hoja.querySelector(`[data-org-tipo="${k}"]`).value });
+      }
+      hoja.remove();
+      listo(elegidos);
+    });
+  });
+}
 
 async function cargarArchivos(archivos, asigId, tipo) {
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
@@ -2073,6 +2363,22 @@ document.addEventListener("submit", async (ev) => {
   } else if (f.dataset.form === "nombre") {
     guardarPref("nombre", f.querySelector("input").value.trim());
     router();
+  } else if (f.dataset.form === "nota") {
+    notas.guardarNota(vistaDoc.doc.id, Number(f.dataset.n), f.t.value);
+    aviso("✏️ Nota guardada");
+    const y = scrollY;
+    await router();
+    scrollTo(0, y);
+  } else if (f.dataset.form === "reporte") {
+    const k = Number(f.dataset.i);
+    const { doc, i } = enPantalla[k];
+    const p = doc.cuestionario[i];
+    notas.reportar({ material: doc.nombre, docId: doc.id, indice: i, fuente: p.fuente || "", pregunta: String(p.pregunta || "").slice(0, 300), comentario: f.c.value.trim() });
+    f.outerHTML = `<p class="sub">✅ Reporte guardado. Envíalo desde Perfil → Copia y compartir.</p>`;
+  } else if (f.dataset.form === "reto") {
+    const r = await leerCodigoDeReto(f.codigo.value);
+    if (!r) return alert("Ese código no es válido o no tienes esa asignatura en Finlay.\nRevisa que tu compañero y tú tengan los mismos materiales.");
+    location.hash = `#/examen-hacer/${encodeURIComponent(r.ambito)}?n=${r.n}&reloj=1&momento=0&reto=${r.codigo}`;
   } else if (f.classList.contains("form-examen")) {
     guardarPref("examenMomento", f.momento.checked ? "1" : "0");
     location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}&momento=${f.momento.checked ? 1 : 0}`;
@@ -2159,6 +2465,57 @@ document.addEventListener("click", async (ev) => {
     mostrarPregunta(Number(b.dataset.i));
   } else if (accion === "menu") {
     abrirMenu();
+  } else if (accion === "anadir") {
+    destinoCarga = { auto: true };
+    $archivo.value = "";
+    $archivo.click();
+  } else if (accion === "flash-girar") {
+    pintarTarjeta(true);
+  } else if (accion === "flash-nota") {
+    const ses = vistaTarjetas.sesion;
+    const t = ses?.lista[ses.k];
+    if (!t) return;
+    const n = Number(b.dataset.n);
+    tarjetas.calificar(t.id, n, db.hoy());
+    if (n >= 2) ses.bien++;
+    if (n === 0) ses.lista.push(t); // "otra vez": vuelve al final de hoy
+    ses.k++;
+    pintarTarjeta(false);
+  } else if (accion === "marcar-diapo") {
+    const m = notas.alternarMarca(vistaDoc.doc.id, Number(b.dataset.n));
+    b.textContent = m ? "★" : "☆";
+    b.classList.toggle("activa", m);
+    aviso(m ? "★ Marcada como importante (está en Mis notas)" : "Marca quitada");
+  } else if (accion === "nota-diapo") {
+    const fig = b.closest("figure");
+    const n = Number(b.dataset.n);
+    if (fig.querySelector(".nota-editor")) return;
+    const actual = notas.notasDe(vistaDoc.doc.id)[n]?.t || "";
+    fig.querySelector(".diapo-nota")?.remove();
+    fig.insertAdjacentHTML("beforeend", `<form class="nota-editor" data-form="nota" data-n="${n}">
+      <textarea name="t" rows="3" placeholder="Escribe tu nota sobre esta diapositiva…">${esc(actual)}</textarea>
+      <div><button type="button" class="btn mini secundario" data-accion="nota-cancelar">Cancelar</button><button class="btn mini">Guardar nota</button></div></form>`);
+    fig.querySelector("textarea").focus();
+  } else if (accion === "nota-cancelar") {
+    router();
+  } else if (accion === "reportar") {
+    const caja = b.closest(".explicacion");
+    if (caja.querySelector(".reporte-form")) return;
+    caja.insertAdjacentHTML("beforeend", `<form class="reporte-form" data-form="reporte" data-i="${b.dataset.i}">
+      <textarea name="c" rows="2" required placeholder="¿Qué está mal? (por ejemplo: la respuesta correcta es otra, falta una opción…)"></textarea>
+      <button class="btn mini">Guardar reporte</button></form>`);
+    caja.querySelector(".reporte-form textarea").focus();
+  } else if (accion === "reportes-enviar") {
+    compartirArchivo(`finlay-reportes-${db.hoy()}.txt`, notas.textoDeReportes(), "text/plain");
+  } else if (accion === "reportes-borrar") {
+    if (confirm("¿Borrar los reportes? Hazlo solo si ya se los mandaste a Claude.")) { notas.borrarReportes(); router(); }
+  } else if (accion === "reto-crear") {
+    const f = document.querySelector(".form-examen");
+    const codigo = await codigoDeReto(f.ambito.value, Number(f.n.value));
+    compartirArchivo(`reto-finlay-${codigo}.txt`, `🤝 Reto Finlay: ${codigo}\nAbre Finlay → Evaluaciones → Reto con un compañero y escribe el código.`, "text/plain");
+    location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}&momento=0&reto=${codigo}`;
+  } else if (accion === "reto-compartir") {
+    compartirArchivo("reto-finlay.txt", b.dataset.texto, "text/plain");
   } else if (accion === "enfocar-busqueda") {
     const q = document.querySelector(".buscador input[name=q]");
     q?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -2308,7 +2665,8 @@ document.addEventListener("change", (ev) => {
 });
 
 $archivo.addEventListener("change", () => {
-  if ($archivo.files.length && destinoCarga) cargarArchivos([...$archivo.files], destinoCarga.asig, destinoCarga.tipo);
+  if ($archivo.files.length && destinoCarga?.auto) anadirMateriales([...$archivo.files]);
+  else if ($archivo.files.length && destinoCarga) cargarArchivos([...$archivo.files], destinoCarga.asig, destinoCarga.tipo);
 });
 
 
@@ -2356,6 +2714,9 @@ async function router() {
     if (partes[0] === "temas") await vistaTemas(partes[1]);
     else if (partes[0] === "progreso") await vistaProgresoGeneral(partes[1]);
     else if (partes[0] === "ajustes") await vistaAjustes();
+    else if (partes[0] === "tarjetas") await vistaTarjetas(partes[1]);
+    else if (partes[0] === "notas") await vistaNotas();
+    else if (partes[0] === "atlas") await vistaAtlas();
     else if (partes[0] === "evaluaciones") await vistaEvaluaciones();
     else if (partes[0] === "perfil") await vistaPerfil();
     else if (partes[0] === "anio") await vistaAnio(Number(partes[1]));
@@ -2372,6 +2733,7 @@ async function router() {
     else if (partes[0] === "examen") await vistaExamenInicio(partes[1]);
     else if (partes[0] === "examen-hacer") {
       const ps = new URLSearchParams(consulta);
+      vistaExamen.reto = ps.get("reto") || "";
       await vistaExamen(partes[1], Number(ps.get("n")) || 20, ps.get("reloj") === "1", ps.get("momento") === "1");
     }
     else if (partes[0] === "planes") await vistaPlanes();

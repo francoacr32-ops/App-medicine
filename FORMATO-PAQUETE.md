@@ -72,7 +72,7 @@ paquetes que se comparten desde la app también se crean así cuando hay diaposi
 | `asignatura` | sí | Nombre de la asignatura (se crea si no existe) |
 | `semestre` | no | 1, 2 o 0 (anual), si la asignatura es nueva |
 | `nombre` | sí | Nombre de la conferencia o capítulo. Si ya existe en esa asignatura (mismo nombre, sin extensión), solo se le añaden resumen y cuestionario |
-| `tipo` | no | `conferencia` (por defecto), `taller` (clase taller) o `libro` |
+| `tipo` | no | `conferencia` (por defecto), `taller` (clase taller), `libro` o `consulta` (formulario de medicamentos, valores de laboratorio, protocolos…) |
 | `etiqueta` | no | `pág.`, `diap.` o `parte` |
 | `paginas` | no | Texto completo, página a página (para el buscador y la lectura) |
 | `diapositivas` | no | Solo en paquetes .zip: `{carpeta, total}`. Las páginas originales están en `carpeta/001.webp`, `002.webp`… y se muestran como en un PDF |
@@ -90,6 +90,11 @@ paquetes que se comparten desde la app también se crean así cuando hay diaposi
 | `completar` | Complete | `pregunta` con `___` en cada espacio; `respuestas` (una por espacio; texto o lista de alternativas válidas) |
 | `multiple` | Selección única | `opciones`, `correcta` (índice desde 0) |
 | `abierta` | Pregunta y respuesta | `respuesta` (el estudiante se autoevalúa) |
+
+Campos opcionales de cualquier pregunta:
+
+- `caso`: texto de un **caso clínico** que se muestra antes del enunciado (para 3er año en adelante). Ejemplo: `"caso": "Paciente de 45 años que acude por dolor torácico…"`.
+- `porque`: en `multiple` y `marcar`, una lista con **la explicación de cada opción**, en el mismo orden que `opciones` (por qué es correcta o por qué no). Se muestra al corregir.
 
 Todas las preguntas aceptan además `cita`: la frase **literal** del material donde está la respuesta. Cuando el estudiante falla, Finlay abre esa página y resalta la cita en verde (corrector). Sin `cita`, Finlay la busca por palabras clave en la página indicada en `fuente`.
 

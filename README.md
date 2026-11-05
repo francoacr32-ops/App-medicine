@@ -72,3 +72,4 @@ docs/                 ← la app (lo que publica GitHub Pages)
 
 - `TZ=America/Havana node pruebas/tiempo.test.mjs` — sesiones falsas: una de 11:50 a 12:10, una que cruza la medianoche, una cerrada de golpe, días con preguntas sin tiempo y datos de versiones anteriores. Comprueba que la suma de las franjas es igual al total, que ningún día con preguntas queda en 0 min y que el promedio usa los días activos.
 - `TZ=America/Havana node pruebas/progreso.e2e.js` — lo mismo en el navegador, en la pantalla "Mi progreso" (necesita la app servida en `http://localhost:8766/` y Playwright).
+- `node pruebas/organizar.test.mjs` — organización automática de materiales (asignatura, año y tipo por el nombre y el texto) y tarjetas de memoria automáticas a partir de las definiciones.
