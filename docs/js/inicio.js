@@ -132,39 +132,7 @@ export function htmlAnilloPct(pct, texto = "") {
   </div>`;
 }
 
-// ---------- Tiempo de estudio (minutos con la app abierta y en uso) ----------
-let ultimaActividad = Date.now();
-function leerTiempo() {
-  try { return JSON.parse(localStorage.getItem("finlay.tiempo") || "{}"); } catch { return {}; }
-}
-export function iniciarContadorDeTiempo(hoy) {
-  for (const e of ["pointerdown", "keydown", "scroll", "touchstart"])
-    addEventListener(e, () => (ultimaActividad = Date.now()), { passive: true, capture: true });
-  setInterval(() => {
-    if (document.hidden || Date.now() - ultimaActividad > 120000) return; // sin usarla 2 min: no cuenta
-    const t = leerTiempo();
-    const f = hoy();
-    t[f] = (t[f] || 0) + 30;
-    const fechas = Object.keys(t).sort();
-    while (fechas.length > 90) delete t[fechas.shift()];
-    // A qué hora del día se estudia (para "¿Cuándo estudias más?")
-    const horas = leerHoras();
-    const h = new Date().getHours();
-    horas[h] = (horas[h] || 0) + 30;
-    try {
-      localStorage.setItem("finlay.tiempo", JSON.stringify(t));
-      localStorage.setItem("finlay.horas", JSON.stringify(horas));
-    } catch {}
-  }, 30000);
-}
-function leerHoras() {
-  try { return JSON.parse(localStorage.getItem("finlay.horas") || "{}"); } catch { return {}; }
-}
-/** Segundos estudiados: en total, por día y por hora del día */
-export function tiempoDeEstudio() {
-  const t = leerTiempo();
-  return { total: Object.values(t).reduce((s, x) => s + x, 0), porDia: t, porHora: leerHoras() };
-}
+// El tiempo de estudio se guarda y se calcula en tiempo.js (una sola tabla de sesiones).
 export function textoTiempo(seg) {
   const h = Math.floor(seg / 3600);
   const m = Math.round((seg % 3600) / 60);

@@ -948,3 +948,12 @@ details.menu-fila p { margin: 0 10px 12px 46px; color: var(--suave); font-size: 
 .totales .tarjeta > span:first-child { font-size: 1.3rem; }
 .totales b { font-size: 1.25rem; }
 .totales .sub { font-size: .76rem; line-height: 1.3; }
+
+/* Tiempo: total de las franjas, aviso de estimación y tarjetas de "Todo el tiempo" */
+.franja-total { display: flex; justify-content: space-between; margin: 2px 0 0; padding-top: 8px; border-top: 1px dashed var(--borde); font-weight: 700; }
+.act-estimado { margin: 6px 4px 0; font-size: .74rem; }
+.act-cambio.primera { color: var(--acento); }
+.ico-detalle { width: 18px; height: 18px; vertical-align: -3px; color: var(--acento); }
+.totales .tarjeta > .ico { width: 24px; height: 24px; color: var(--acento-2); margin-bottom: 4px; }
+.totales .tarjeta > .ico:first-child[class*="ico"] { flex: none; }
+.total-tema .sub { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

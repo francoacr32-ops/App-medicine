@@ -67,3 +67,8 @@ docs/                 ← la app (lo que publica GitHub Pages)
   js/estudio.js       ← repaso espaciado, racha, examen, plan y copias
   lib/                ← pdf.js (Mozilla, Apache 2.0) y JSZip (MIT)
 ```
+
+## Pruebas del tiempo de estudio
+
+- `TZ=America/Havana node pruebas/tiempo.test.mjs` — sesiones falsas: una de 11:50 a 12:10, una que cruza la medianoche, una cerrada de golpe, días con preguntas sin tiempo y datos de versiones anteriores. Comprueba que la suma de las franjas es igual al total, que ningún día con preguntas queda en 0 min y que el promedio usa los días activos.
+- `TZ=America/Havana node pruebas/progreso.e2e.js` — lo mismo en el navegador, en la pantalla "Mi progreso" (necesita la app servida en `http://localhost:8766/` y Playwright).

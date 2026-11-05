@@ -11,8 +11,9 @@ import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
 import { activarZoom } from "./zoom.js";
-import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, textoPuntos } from "./inicio.js";
+import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, favoritos, esFavorito, alternarFavorito, textoPuntos } from "./inicio.js";
 import * as juego from "./logros.js";
+import * as tiempo from "./tiempo.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -147,6 +148,20 @@ function htmlAvatar(clase, conInicial = false) {
   return `<img class="${clase}" src="iconos/retrato-finlay.webp" alt="Carlos J. Finlay">`;
 }
 
+/**
+ * Tiempo de estudio: TODAS las pantallas usan esto (la misma tabla de sesiones y la misma función),
+ * más los tramos estimados para los días que tienen preguntas pero no tiempo guardado.
+ */
+async function datosDeTiempo() {
+  const diario = await db.listarDiario();
+  const respuestas = await db.todasLasRespuestas();
+  const horas = [...tiempo.marcasDeRespuestas(), ...respuestas.map((r) => r.fecha).filter(Boolean)];
+  const reales = tiempo.sesiones();
+  const tramos = [...reales, ...tiempo.estimarFaltantes(reales, diario, horas)];
+  return { tramos, diario, respuestas, analizar: (op) => tiempo.analizar(tramos, op) };
+}
+const minutos = (seg) => Math.round(seg / 60);
+
 /** Datos que necesitan los logros y trofeos */
 async function contextoLogros() {
   const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
@@ -248,7 +263,9 @@ async function vistaInicio() {
   const { lista } = preguntasDelRepaso(r.conPreguntas, r.respuestas, meta);
 
   const pctMeta = Math.min(100, Math.round((r.hoy.preguntas / meta) * 100));
-  const tiempo = tiempoDeEstudio();
+  const t = await datosDeTiempo();
+  const segHoy = t.analizar({ desde: tiempo.inicioDelDia(db.hoy()) }).total;
+  const segTotal = t.analizar().total;
   const verPg = pref("verProgreso", "hoy");
   // "Continuar estudiando": la última conferencia abierta, o el repaso, o los temas
   const docUltimo = pref("ultimo") && docs.find((d) => d.id === pref("ultimo"));
@@ -306,13 +323,13 @@ async function vistaInicio() {
         </span></div>
       <a class="pg-fila" data-panel="hoy" href="#/progreso" ${verPg === "hoy" ? "" : "hidden"}>${htmlAnilloPct(pctMeta, "meta de hoy")}
         <span class="pg-datos">
-          <span>${ico("reloj")}<b>${textoTiempo(tiempo.porDia[db.hoy()] || 0)}</b><span>Estudio hoy</span></span>
+          <span>${ico("reloj")}<b>${tiempo.textoMinutos(minutos(segHoy))}</b><span>Estudio hoy</span></span>
           <span>${ico("check")}<b>${r.hoy.preguntas}</b><span>Preguntas hoy · ${r.hoy.correctas} bien</span></span>
           <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
         </span></a>
       <a class="pg-fila" data-panel="total" href="#/progreso" ${verPg === "total" ? "" : "hidden"}>${htmlAnilloPct(r.pct, "dominado")}
         <span class="pg-datos">
-          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Tiempo en la app</span></span>
+          <span>${ico("reloj")}<b>${tiempo.textoMinutos(minutos(segTotal))}</b><span>Tiempo en la app</span></span>
           <span>${ico("estudiar")}<b>${docs.length}</b><span>Temas · ${r.respondidas} respuestas</span></span>
           <span>${ico("examen")}<b>${r.examenes.length}</b><span>Evaluaciones</span></span>
         </span></a>
@@ -374,7 +391,6 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
   const r = await resumenDeEstudio();
   const lista = insignias({ racha: r.racha, totalRespondidas: r.respondidas, temasDominados: r.temasDominados,
     mejorNota: r.examenes.reduce((m, e) => Math.max(m, e.nota), 0) });
-  const tiempo = tiempoDeEstudio();
   const pestanas = `<nav class="pestanas-pildora">
     <a href="#/progreso" class="${pestana !== "logros" ? "activa" : ""}">Estadísticas</a>
     <a href="#/progreso/logros" class="${pestana === "logros" ? "activa" : ""}">Logros</a></nav>`;
@@ -412,52 +428,71 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
   areas.sort((x, y) => y.p.pct - x.p.pct);
   const colores = ["#2dd4cf", "#a3e635", "#c084fc", "#f2962e", "#e5408f", "#2f7ff0"];
   // ---------- Actividad: últimos 7 o 30 días ----------
+  // Todo sale de la misma tabla de sesiones y de la misma función (tiempo.analizar).
+  const t = await datosDeTiempo();
   const nDias = pestana === "30" ? 30 : 7;
   const fechaDe = (k) => {
     const d = new Date(db.hoy() + "T12:00:00");
     d.setDate(d.getDate() - k);
-    return { d, f: new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) };
+    return { d, f: tiempo.fechaLocal(d.getTime()) };
   };
-  const diaDe = (k) => {
+  const desde = tiempo.inicioDelDia(fechaDe(nDias - 1).f);
+  const desdeAntes = tiempo.inicioDelDia(fechaDe(2 * nDias - 1).f);
+  const periodo = t.analizar({ desde });
+  const anterior = t.analizar({ desde: desdeAntes, hasta: desde });
+  const todo = t.analizar();
+  const diaDe = (k, an) => {
     const { d, f } = fechaDe(k);
-    const reg = r.diario.find((x) => x.fecha === f);
-    return { f, d, n: reg?.preguntas || 0, ok: reg?.correctas || 0, seg: tiempo.porDia[f] || 0 };
+    const reg = t.diario.find((x) => x.fecha === f);
+    return { f, d, n: reg?.preguntas || 0, ok: reg?.correctas || 0, seg: an.porDia[f] || 0 };
   };
   const dias = [];
-  for (let k = nDias - 1; k >= 0; k--) dias.push(diaDe(k));
+  for (let k = nDias - 1; k >= 0; k--) dias.push(diaDe(k, periodo));
   const previos = [];
-  for (let k = 2 * nDias - 1; k >= nDias; k--) previos.push(diaDe(k));
-  const suma = (l, c) => l.reduce((t, x) => t + x[c], 0);
-  const nTot = suma(dias, "n"), okTot = suma(dias, "ok"), segTot = suma(dias, "seg");
+  for (let k = 2 * nDias - 1; k >= nDias; k--) previos.push(diaDe(k, anterior));
+  const suma = (l, c) => l.reduce((s2, x) => s2 + x[c], 0);
+  const nTot = suma(dias, "n"), okTot = suma(dias, "ok");
+  // Franjas: los minutos de cada una suman exactamente los minutos del período
+  const franjasMin = tiempo.minutosRepartidos(periodo.porFranja);
+  const minTot = franjasMin.total;
   const activos = dias.filter((x) => x.n || x.seg >= 60).length;
+  const promedio = activos ? Math.round(minTot / activos) : 0;
   const mejor = [...dias].sort((x, y) => y.n - x.n || y.seg - x.seg)[0];
   const nPrev = suma(previos, "n");
-  const cambio = nPrev ? Math.round(((nTot - nPrev) / nPrev) * 100) : null;
+  const hayAntes = nPrev > 0 || anterior.total >= 60;
+  const dif = nTot - nPrev;
   const nombreDia = (x, largo = false) => x.d.toLocaleDateString("es", largo ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric" }).replace(".", "");
-  const periodo = nDias === 7 ? "la semana anterior" : "los 30 días anteriores";
+  const comparacion = !hayAntes
+    ? (nDias === 7 ? "Tu primera semana 🎉" : "Tus primeros 30 días 🎉")
+    : `${dif > 0 ? "+" : dif < 0 ? "−" : "="}${dif ? Math.abs(dif) : ""} vs ${nDias === 7 ? "semana pasada" : "30 días anteriores"}`;
+  const franjas = tiempo.FRANJAS.map((x, k) => ({ ...x, min: franjasMin.partes[k], rango: `${x.de}:00–${x.a === 24 ? "0" : x.a}:00` }));
+  const maxFranja = Math.max(1, ...franjas.map((x) => x.min));
+  const favorita = minTot ? [...franjas].sort((x, y) => y.min - x.min)[0] : null;
 
-  // Cuándo estudias más (por franjas del día)
-  const FRANJAS = [["🌙", "Madrugada", 0, 6], ["🌅", "Mañana", 6, 12], ["☀️", "Tarde", 12, 18], ["🌆", "Noche", 18, 24]];
-  const franjas = FRANJAS.map(([e, t, de, a]) => {
-    let seg = 0;
-    for (let h = de; h < a; h++) seg += tiempo.porHora[h] || 0;
-    return { e, t, seg, rango: `${de}:00–${a === 24 ? "0" : a}:00` };
-  });
-  const maxFranja = Math.max(1, ...franjas.map((x) => x.seg));
-  const favorita = franjas.some((x) => x.seg) ? [...franjas].sort((x, y) => y.seg - x.seg)[0] : null;
-
-  // Totales de todo el tiempo
-  const e = juego.estado();
-  const diasEstudiados = new Set([...r.diario.filter((x) => x.preguntas).map((x) => x.fecha),
-    ...Object.entries(tiempo.porDia).filter(([, v]) => v >= 60).map(([f]) => f)]).size;
-  const notaMedia = r.examenes.length ? (r.examenes.reduce((t, x) => t + x.nota, 0) / r.examenes.length).toFixed(1).replace(".0", "") : "—";
+  // Todo el tiempo (sin repetir lo de arriba)
+  const totalPreguntas = t.diario.reduce((s2, x) => s2 + x.preguntas, 0);
+  const aciertosPorDoc = new Map();
+  for (const x of t.respuestas) aciertosPorDoc.set(x.docId, (aciertosPorDoc.get(x.docId) || 0) + (x.aciertos || 0));
+  const [idMejorTema, aciertosMejor] = [...aciertosPorDoc.entries()].sort((x, y) => y[1] - x[1])[0] || [];
+  const mejorTema = idMejorTema && aciertosMejor ? r.docs.find((d) => d.id === idMejorTema) : null;
+  const fechasEstudio = [...new Set(t.diario.filter((x) => x.preguntas).map((x) => x.fecha)
+    .concat(Object.entries(todo.porDia).filter(([, v]) => v >= 60).map(([f]) => f)))].sort();
+  let rachaLarga = 0, seguidos = 0, anteriorF = null;
+  for (const f of fechasEstudio) {
+    seguidos = anteriorF && (inicioDia(f) - inicioDia(anteriorF)) / 86400000 === 1 ? seguidos + 1 : 1;
+    rachaLarga = Math.max(rachaLarga, seguidos);
+    anteriorF = f;
+  }
+  function inicioDia(f) { return new Date(f + "T12:00:00").getTime(); }
+  const notaMedia = r.examenes.length ? (r.examenes.reduce((s2, x) => s2 + x.nota, 0) / r.examenes.length).toFixed(1).replace(".0", "") : "—";
+  vistaProgresoGeneral.dias = dias;
 
   poner("Mi progreso", `${pestanas}
     <section class="tarjeta progreso-general sin-enlace">
       <span class="pg-fila">${htmlAnilloPct(r.pct, "Progreso total")}
         <span class="pg-datos">
           <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
-          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Tiempo en la app</span></span>
+          <span>${ico("reloj")}<b>${tiempo.textoMinutos(minutos(todo.total))}</b><span>Tiempo en la app</span></span>
           <span>${ico("trofeo")}<b>${lista.filter((x) => x.ok).length}</b><span>Logros</span></span>
         </span></span>
     </section>
@@ -466,26 +501,30 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
       <span class="pg-pestanas"><a href="#/progreso" class="${nDias === 7 ? "activa" : ""}">7 días</a><a href="#/progreso/30" class="${nDias === 30 ? "activa" : ""}">30 días</a></span></div>
     <div class="act-resumen">
       <div class="tarjeta act-dato"><span class="sub">Preguntas</span><b>${nTot}</b>
-        <span class="act-cambio ${cambio === null ? "" : cambio >= 0 ? "sube" : "baja"}">${cambio === null ? "sin datos de antes" : `${cambio >= 0 ? "▲" : "▼"} ${Math.abs(cambio)} % que ${periodo}`}</span></div>
+        <span class="act-cambio ${!hayAntes ? "primera" : dif >= 0 ? "sube" : "baja"}">${comparacion}</span></div>
       <div class="tarjeta act-dato"><span class="sub">Aciertos</span><b>${nTot ? Math.round((okTot / nTot) * 100) : 0}%</b><span class="sub">${okTot} bien · ${nTot - okTot} mal</span></div>
-      <div class="tarjeta act-dato"><span class="sub">Tiempo de estudio</span><b>${textoTiempo(segTot)}</b><span class="sub">${textoTiempo(Math.round(segTot / nDias))} por día</span></div>
+      <div class="tarjeta act-dato"><span class="sub">Tiempo de estudio</span><b>${tiempo.textoMinutos(minTot)}</b>
+        <span class="sub">${activos ? `${tiempo.textoMinutos(promedio)} por día estudiado` : "Aún no has estudiado en estos días"}</span></div>
       <div class="tarjeta act-dato"><span class="sub">Días activos</span><b>${activos} <small>de ${nDias}</small></b>
         <span class="act-puntos">${dias.map((x) => `<i class="${x.n || x.seg >= 60 ? "si" : ""}"></i>`).join("")}</span></div>
     </div>
     <div class="tarjeta act-grafica">
       <div class="act-leyenda"><span><i class="ley-bien"></i>Correctas</span><span><i class="ley-mal"></i>Incorrectas</span><span><i class="ley-min"></i>Minutos</span></div>
       ${graficaActividad(dias, nDias)}
-      <p class="act-detalle" id="act-detalle">${mejor && (mejor.n || mejor.seg)
-        ? `⭐ Tu mejor día: <b>${esc(nombreDia(mejor, true))}</b> · ${mejor.n} preguntas · ${textoTiempo(mejor.seg)}. <span class="sub">Toca una barra para ver cada día.</span>`
+      <p class="act-detalle" id="act-detalle">${mejor && (mejor.n || mejor.seg >= 60)
+        ? `⭐ Tu mejor día: <b>${esc(nombreDia(mejor, true))}</b> · ${mejor.n} preguntas · ${tiempo.textoMinutos(minutos(mejor.seg))}. <span class="sub">Toca una barra para ver cada día.</span>`
         : "Todavía no hay actividad en estos días. ¡Responde unas preguntas!"}</p>
+      ${periodo.estimado >= 60 ? `<p class="sub act-estimado">ℹ️ ${tiempo.textoMinutos(minutos(periodo.estimado))} son un cálculo aproximado a partir de la hora de tus respuestas (días de antes de que Finlay guardara el tiempo).</p>` : ""}
     </div>
 
     <h2>¿Cuándo estudias más?</h2>
     <div class="tarjeta franjas">${franjas.map((x) => `<div class="franja ${favorita === x ? "favorita" : ""}">
-        <span class="franja-nombre">${x.e} ${x.t}<span class="sub">${x.rango}</span></span>
-        <span class="franja-barra"><span style="width:${Math.round((x.seg / maxFranja) * 100)}%"></span></span>
-        <b>${textoTiempo(x.seg)}</b></div>`).join("")}
-      <p class="sub">${favorita ? `Estudias más por la <b>${favorita.t.toLowerCase()}</b>. Repasa a esa hora: es cuando mejor te concentras.` : "Cuando uses Finlay unos días, aquí verás a qué hora estudias más."}</p></div>
+        <span class="franja-nombre">${x.emoji} ${x.nombre}<span class="sub">${x.rango}</span></span>
+        <span class="franja-barra"><span style="width:${Math.round((x.min / maxFranja) * 100)}%"></span></span>
+        <b>${tiempo.textoMinutos(x.min)}</b></div>`).join("")}
+      <p class="franja-total"><span>Total</span><b>${tiempo.textoMinutos(minTot)}</b></p>
+      ${periodo.horaAproximada >= 60 ? `<p class="sub act-estimado">ℹ️ De ${tiempo.textoMinutos(minutos(periodo.horaAproximada))} medidos por la versión anterior de Finlay no se guardó la hora exacta: se colocaron según la hora de tus respuestas.</p>` : ""}
+      <p class="sub">${favorita ? `Estudias más por la <b>${favorita.nombre.toLowerCase()}</b>. Repasa a esa hora: es cuando mejor te concentras.` : "Cuando estudies unos días, aquí verás a qué hora estudias más."}</p></div>
 
     <h2>Áreas más fuertes</h2>
     <div class="tarjeta areas">${areas.length ? areas.map(({ a, p }, i) => `<a class="area" href="${enlaceAsig(a.id)}/progreso">
@@ -495,34 +534,36 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
 
     <h2>Todo el tiempo</h2>
     <div class="totales">
-      <div class="tarjeta"><span>⏱</span><b>${textoTiempo(tiempo.total)}</b><span class="sub">en la app</span></div>
-      <div class="tarjeta"><span>📅</span><b>${diasEstudiados}</b><span class="sub">días estudiados</span></div>
-      <div class="tarjeta"><span>✍️</span><b>${r.respondidas}</b><span class="sub">respuestas</span></div>
-      <div class="tarjeta"><span>🎯</span><b>${r.respondidas ? Math.round((r.correctas / r.respondidas) * 100) : 0}%</b><span class="sub">de aciertos</span></div>
-      <div class="tarjeta"><span>📝</span><b>${r.examenes.length}</b><span class="sub">exámenes · nota media ${notaMedia}</span></div>
-      <div class="tarjeta"><span>🏁</span><b>${e.pruebas}</b><span class="sub">pruebas terminadas</span></div>
-      <div class="tarjeta"><span>📖</span><b>${e.leidas.length}</b><span class="sub">conferencias leídas completas</span></div>
-      <div class="tarjeta"><span>💎</span><b>${textoPuntos(e.puntos)}</b><span class="sub">puntos · ${esc(r.nivel.nombre)}</span></div>
+      <div class="tarjeta">${ico("check")}<b>${totalPreguntas}</b><span class="sub">preguntas respondidas</span></div>
+      <div class="tarjeta">${ico("llama")}<b>${rachaLarga} día${rachaLarga === 1 ? "" : "s"}</b><span class="sub">racha más larga</span></div>
+      <div class="tarjeta">${ico("examen")}<b>${notaMedia}</b><span class="sub">nota media${r.examenes.length ? ` · ${r.examenes.length} examen${r.examenes.length === 1 ? "" : "es"}` : " (sin exámenes aún)"}</span></div>
+      <div class="tarjeta total-tema">${ico("trofeo")}<b>${mejorTema ? `${aciertosMejor} aciertos` : "—"}</b>
+        <span class="sub">${mejorTema ? `tema con más aciertos: ${esc(mejorTema.nombre)}` : "tema con más aciertos"}</span></div>
     </div>`, "#/perfil");
-  vistaProgresoGeneral.dias = dias;
 }
 
 /** Gráfica de actividad: barras (correctas + incorrectas) y línea de minutos, con ejes */
 function graficaActividad(dias, nDias) {
   const W = 340, H = 220, izq = 30, der = 30, arriba = 24, abajo = 30;
   const ancho = W - izq - der, alto = H - arriba - abajo;
-  const redondo = (v) => { const p = [5, 10, 20, 25, 50, 100, 200, 500, 1000]; return p.find((x) => x >= v) || Math.ceil(v / 1000) * 1000; };
-  const maxN = redondo(Math.max(4, ...dias.map((x) => x.n)));
-  const maxM = redondo(Math.max(4, ...dias.map((x) => Math.round(x.seg / 60))));
+  const minDia = dias.map((x) => Math.round(x.seg / 60));
+  // Eje de minutos: múltiplos de 5 (0, 5, 10, 15…), como mucho 5 tramos
+  const pasoM = 5 * Math.max(1, Math.ceil(Math.max(...minDia, 1) / 25));
+  const lineas = Math.max(1, Math.ceil(Math.max(...minDia, 1) / pasoM));
+  const maxM = pasoM * lineas;
+  // Eje de preguntas: paso "redondo" (1, 2, 5, 10, 20, 25, 50…) con las mismas líneas
+  const PASOS = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000];
+  const pasoN = PASOS.find((p) => p * lineas >= Math.max(...dias.map((x) => x.n), 1)) || 1000;
+  const maxN = pasoN * lineas;
   const paso = ancho / dias.length;
   const bw = Math.max(3, paso * (nDias === 7 ? 0.5 : 0.62));
   const y = (v, max) => arriba + alto - (v / max) * alto;
   let svg = "";
-  for (let i = 0; i <= 4; i++) {
-    const yy = arriba + (alto * i) / 4;
+  for (let i = 0; i <= lineas; i++) {
+    const yy = arriba + (alto * i) / lineas;
     svg += `<line x1="${izq}" y1="${yy}" x2="${W - der}" y2="${yy}" class="g-rejilla"/>
-      <text x="${izq - 5}" y="${yy + 3}" text-anchor="end" class="g-eje">${Math.round(maxN * (1 - i / 4))}</text>
-      <text x="${W - der + 5}" y="${yy + 3}" class="g-eje g-eje-min">${Math.round(maxM * (1 - i / 4))}</text>`;
+      <text x="${izq - 5}" y="${yy + 3}" text-anchor="end" class="g-eje">${pasoN * (lineas - i)}</text>
+      <text x="${W - der + 5}" y="${yy + 3}" class="g-eje g-eje-min">${pasoM * (lineas - i)}</text>`;
   }
   const puntos = [];
   let toques = "";
@@ -531,7 +572,7 @@ function graficaActividad(dias, nDias) {
     const yOk = y(x.ok, maxN), yN = y(x.n, maxN);
     if (x.ok) svg += `<rect x="${cx - bw / 2}" y="${yOk}" width="${bw}" height="${arriba + alto - yOk}" rx="${Math.min(4, bw / 3)}" class="g-bien"/>`;
     if (x.n - x.ok) svg += `<rect x="${cx - bw / 2}" y="${yN}" width="${bw}" height="${yOk - yN}" rx="${Math.min(4, bw / 3)}" class="g-mal"/>`;
-    puntos.push([cx, y(Math.round(x.seg / 60), maxM)]);
+    puntos.push([cx, y(minDia[i], maxM)]);
     const etiqueta = nDias === 7 ? x.d.toLocaleDateString("es", { weekday: "short" }).replace(".", "")
       : i % 5 === 4 || i === dias.length - 1 ? String(x.d.getDate()) : "";
     if (etiqueta) svg += `<text x="${cx}" y="${H - abajo + 16}" text-anchor="middle" class="g-dia ${i === dias.length - 1 ? "g-hoy" : ""}">${esc(etiqueta)}</text>`;
@@ -638,7 +679,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 1.9.2 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 1.9.3 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1167,6 +1208,7 @@ window.addEventListener("popstate", () => cerrarLupa(true) || cerrarVisor(true))
 document.addEventListener("keydown", (e) => e.key === "Escape" && cerrarVisor());
 
 async function responder(k, valor) {
+  tiempo.marcarRespuesta();
   const { doc, i } = enPantalla[k];
   const p = doc.cuestionario[i];
   const tarjeta = document.getElementById("p" + k);
@@ -2046,8 +2088,8 @@ document.addEventListener("click", async (ev) => {
     if (x) {
       document.querySelectorAll(".g-toque.elegido").forEach((t) => t.classList.remove("elegido"));
       b.classList.add("elegido");
-      document.getElementById("act-detalle").innerHTML = `📅 <b>${esc(x.d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" }))}</b> · ` +
-        (x.n || x.seg ? `${x.n} preguntas (${x.ok} bien${x.n ? `, ${Math.round((x.ok / x.n) * 100)} %` : ""}) · ${textoTiempo(x.seg)} de estudio` : "no estudiaste este día");
+      document.getElementById("act-detalle").innerHTML = `${ico("calendario", "ico-detalle")} <b>${esc(x.d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" }))}</b> · ` +
+        (x.n || x.seg >= 60 ? `${x.n} preguntas (${x.ok} bien${x.n ? `, ${Math.round((x.ok / x.n) * 100)} %` : ""}) · ${tiempo.textoMinutos(minutos(x.seg))} de estudio` : "no estudiaste este día");
     }
   } else if (accion === "pg-ver") {
     guardarPref("verProgreso", b.dataset.ver === "hoy" ? "" : b.dataset.ver);
@@ -2252,7 +2294,12 @@ async function router() {
   }
 }
 
-iniciarContadorDeTiempo(db.hoy);
+tiempo.iniciarRegistro();
+(async () => {
+  // Una sola vez: pasar el tiempo guardado por versiones anteriores a la tabla de sesiones
+  const respuestas = await db.todasLasRespuestas();
+  tiempo.migrarDatosViejos(respuestas.map((r) => r.fecha).filter(Boolean));
+})();
 (async () => {
   if (juego.estado().sembrado) return;
   const diario = await db.listarDiario();
