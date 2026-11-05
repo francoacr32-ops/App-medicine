@@ -1063,3 +1063,135 @@ details.menu-fila p { margin: 0 10px 12px 46px; color: var(--suave); font-size: 
 .nota-meta span:first-child { padding-left: 0; border-left: 0; }
 .nota-meta .ico { width: 16px; height: 16px; }
 @media (max-width: 360px) { .eval-ico { width: 60px; height: 60px; padding-right: 10px; } .hero-titulo { font-size: 2rem; } }
+
+/* =========================================================
+   Diseño 2.1: Inicio, Temas y Perfil (cristal y brillo)
+   ========================================================= */
+.barra-oculta { display: none !important; }
+.boton-cristal, .boton-redondo { width: 48px; height: 48px; border-radius: 16px; display: grid; place-items: center; flex: none; cursor: pointer; text-decoration: none;
+  color: var(--texto); background: color-mix(in srgb, var(--tarjeta) 75%, transparent); border: 1px solid color-mix(in srgb, var(--acento-2) 30%, var(--borde));
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--acento-2) 22%, transparent), inset 0 1px 0 rgba(255,255,255,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.boton-redondo { border-radius: 50%; }
+.boton-cristal .ico, .boton-redondo .ico { width: 24px; height: 24px; }
+.barra.marca .boton-cristal { color: var(--acento); }
+.caja-cristal { padding: 10px 12px; border-radius: 20px; background: color-mix(in srgb, var(--tarjeta) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--acento-2) 25%, var(--borde)); box-shadow: 0 8px 22px color-mix(in srgb, var(--acento-2) 18%, transparent), inset 0 1px 0 rgba(255,255,255,.6); }
+.marca-agua { position: absolute; font-size: 110px; line-height: 1; color: var(--acento-2); opacity: .1; pointer-events: none; z-index: 0; }
+.saludo2 { position: relative; }
+.saludo2 .marca-agua { right: 6px; top: -78px; }
+.saludo2 > *:not(.marca-agua) { position: relative; z-index: 1; }
+.marca-pulso { width: 44px; height: 20px; margin-left: 4px; vertical-align: middle; }
+.marca-pulso polyline { fill: none; stroke: var(--acento-2); stroke-width: 2.4; stroke-linejoin: round; }
+
+/* Tarjeta de progreso con tres pestañas e íconos */
+.pg2 { padding: 12px 14px 14px; border-radius: 26px; }
+.pg-pestanas3 { display: grid; grid-template-columns: 1.15fr .8fr 1.25fr; gap: 6px; margin-bottom: 12px; }
+.pg-tab { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border-radius: 999px; border: 0; font: inherit; font-size: .84rem; font-weight: 700;
+  color: var(--texto); background: color-mix(in srgb, var(--fondo-2) 80%, var(--tarjeta)); text-decoration: none; cursor: pointer; white-space: nowrap; }
+.pg-tab .ico { width: 18px; height: 18px; flex: none; }
+.pg-tab.activa { color: #fff; background: linear-gradient(135deg, #0f8f99, #0b6a74); box-shadow: 0 6px 16px color-mix(in srgb, #0f8f99 45%, transparent); }
+.pg-tab-titulo { background: transparent; }
+.pg2 .pg-fila { gap: 14px; }
+.pg2 .anillo-pct { width: 136px; height: 136px; filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--acento-2) 22%, transparent)); }
+.anillo-ico2 { width: 22px; height: 22px; color: var(--acento-2); margin-top: 2px; }
+.pg-datos2 { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--acento-2) 35%, transparent); gap: 12px; }
+.pg-datos2 > span { grid-template-columns: 40px 1fr; column-gap: 10px; }
+.pg-datos2 > span > i { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 1.2rem; }
+.pg-datos2 > span > i .ico { width: 22px; height: 22px; }
+.pg-datos2 > span > b, .pg-datos2 > span > span { grid-column: 2; }
+.dato-azul > i { background: color-mix(in srgb, #2f7ff0 16%, var(--tarjeta)); color: #2f7ff0; }
+.dato-verde > i { background: color-mix(in srgb, #22c55e 18%, var(--tarjeta)); color: #16a34a; }
+.dato-naranja > i { background: color-mix(in srgb, #f2962e 18%, var(--tarjeta)); }
+.dato-morado > i { background: color-mix(in srgb, #9b4fe0 16%, var(--tarjeta)); color: #9b4fe0; }
+.pg2 .pg-nota { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px 0 0; padding: 9px 12px; border-radius: 14px; font-size: .82rem; color: var(--texto);
+  background: color-mix(in srgb, var(--fondo-2) 80%, var(--tarjeta)); }
+.pg2 .pg-nota .ico { width: 20px; height: 20px; color: #2f7ff0; flex: none; }
+
+/* Botón Continuar estudiando (verde azulado profundo con brillo) */
+.btn-continuar { display: flex; align-items: center; gap: 14px; margin: 6px 0; padding: 14px 14px 14px 20px; border-radius: 999px; text-decoration: none; color: #fff;
+  background: linear-gradient(120deg, #0b7f8a, #0e5f7a 55%, #0a4f6f); border: 2px solid color-mix(in srgb, #2ee6dc 55%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, #0b7f8a 45%, transparent), 0 0 0 5px color-mix(in srgb, #2ee6dc 12%, transparent), inset 0 1px 0 rgba(255,255,255,.25); }
+.btn-continuar-play .ico { width: 34px; height: 34px; fill: #fff; stroke: #fff; }
+.btn-continuar-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.btn-continuar-texto b { font-size: 1.2rem; line-height: 1.2; }
+.btn-continuar-texto small { font-size: .82rem; opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn-continuar-flecha { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; flex: none; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); }
+.btn-continuar-flecha .ico { width: 22px; height: 22px; }
+.ico-titulo { width: 22px; height: 22px; color: var(--acento-2); margin-right: 6px; vertical-align: -4px; stroke-width: 3; }
+.plan-tarjeta .miniatura-dibujo, .plan-trofeo { width: 72px; height: 60px; object-fit: cover; border-radius: 16px; }
+.plan-trofeo { object-fit: contain; background: transparent; box-shadow: none; }
+
+/* Temas: portada con el libro, tarjetas grandes con imagen */
+.hero-temas { position: relative; display: flex; align-items: center; gap: 12px; margin: 0 -4px 14px; padding-top: max(10px, env(safe-area-inset-top)); }
+.hero-temas-libro { width: 104px; height: auto; flex: none; filter: drop-shadow(0 8px 16px color-mix(in srgb, var(--acento-2) 35%, transparent)); }
+.hero-temas-texto { flex: 1; min-width: 0; }
+.hero-temas .hero-titulo { font-size: 2.3rem; }
+.hero-raya.corta { width: 64px; height: 4px; margin: 4px 0 6px; }
+.hero-temas .hero-lema { margin: 0; font-size: .95rem; }
+.hero-botones { display: flex; gap: 8px; align-self: flex-start; margin-top: 8px; }
+.tema-tarjeta { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; padding: 8px 12px 8px 8px; border-radius: 24px; text-decoration: none; color: var(--texto);
+  background: var(--tarjeta); border: 1px solid color-mix(in srgb, var(--acento-2) 22%, var(--borde));
+  box-shadow: 0 10px 26px color-mix(in srgb, #2f7ff0 14%, transparent), inset 0 1px 0 rgba(255,255,255,.6); }
+.tema-img { width: 116px; height: 116px; flex: none; border-radius: 20px; overflow: hidden; display: grid; place-items: center; background: #0a1730; color: #7fe7e3;
+  box-shadow: 0 6px 18px color-mix(in srgb, #2f7ff0 35%, transparent), 0 0 0 2px color-mix(in srgb, #5ad7e6 40%, transparent); }
+.tema-img img { width: 100%; height: 100%; object-fit: cover; }
+.tema-img .ico { width: 40px; height: 40px; }
+.tema-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.tema-nombre { font-size: 1.12rem; line-height: 1.2; position: relative; padding-left: 12px; }
+.tema-nombre::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 4px; border-radius: 4px; background: linear-gradient(180deg, #2ee6dc, #2f7ff0); }
+.tema-desc { font-size: .88rem; color: var(--suave); line-height: 1.3; }
+.tema-cuenta { display: flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 700; color: var(--texto); flex-wrap: wrap; }
+.tema-cuenta .ico { width: 18px; height: 18px; color: var(--acento-2); }
+.tema-cuenta i { font-style: normal; color: var(--suave); }
+.tema-tarjeta .flecha-circulo { width: 42px; height: 42px; box-shadow: 0 4px 12px color-mix(in srgb, #2f7ff0 25%, transparent); }
+@media (max-width: 380px) { .tema-img { width: 92px; height: 92px; } .hero-temas-libro { width: 80px; } }
+
+/* Perfil: avatar con pulso, nivel brillante, tarjetas oscuras y menú de cristal */
+.perfil-titulo { display: flex; align-items: center; justify-content: space-between; padding-top: max(10px, env(safe-area-inset-top)); }
+.perfil-titulo h1 { margin: 0; font-size: 1.6rem; padding-left: 12px; position: relative; }
+.perfil-titulo h1::before { content: ""; position: absolute; left: 0; top: .15em; bottom: .15em; width: 5px; border-radius: 4px; background: linear-gradient(180deg, #2ee6dc, #2f7ff0); }
+.perfil-agua { right: 10px; top: 70px; font-size: 140px; }
+.avatar-grande { width: 150px; height: 150px; border: 4px solid #2f9bff;
+  box-shadow: 0 0 0 8px color-mix(in srgb, #2f9bff 16%, transparent), 0 0 40px color-mix(in srgb, #2f9bff 55%, transparent); }
+.avatar-inicial { font-size: 4rem; background: radial-gradient(circle at 40% 30%, #1f63d6, #0a2a6b 75%); }
+.avatar-pulso { position: absolute; left: 12%; width: 76%; top: 50%; transform: translateY(-50%); pointer-events: none; opacity: .55; }
+.avatar-pulso polyline { fill: none; stroke: #5ef2ea; stroke-width: 2.5; stroke-linejoin: round; }
+.avatar-lapiz { width: 44px; height: 44px; right: 0; bottom: 6px; }
+.perfil-nombre { font-size: 2.1rem; }
+.perfil-pildora { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 6px 8px; border-radius: 999px; font-weight: 600;
+  background: color-mix(in srgb, var(--tarjeta) 80%, transparent); border: 1px solid var(--borde); box-shadow: var(--sombra); }
+.perfil-pildora img { width: 32px; height: 32px; object-fit: cover; border-radius: 50%; }
+.perfil-nivel2 { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; width: 100%; margin-top: 14px; }
+.nivel-barra.brillo { height: 22px; margin: 0; padding: 3px; background: color-mix(in srgb, var(--fondo-2) 80%, var(--tarjeta)); box-shadow: inset 0 1px 3px rgba(0,0,0,.12); }
+.nivel-barra.brillo > span { background: linear-gradient(90deg, #2ee6dc, #2f7ff0, #1d4ed8); box-shadow: 0 0 14px rgba(46, 230, 220, .7); min-width: 16px; }
+.perfil-faltan { padding: 6px 12px; border-radius: 999px; font-size: .8rem; font-weight: 600; background: color-mix(in srgb, var(--tarjeta) 85%, transparent); border: 1px solid var(--borde); white-space: nowrap; }
+.perfil-cifras2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 18px 0 16px; }
+.cristal-oscuro { position: relative; display: flex; align-items: center; gap: 10px; min-height: 120px; padding: 12px; border-radius: 22px; text-decoration: none; color: #fff;
+  background: linear-gradient(150deg, #123a6e, #0a1f44 70%); border: 2px solid color-mix(in srgb, #2ee6dc 45%, transparent);
+  box-shadow: 0 12px 28px rgba(10, 40, 100, .35), inset 0 1px 0 rgba(255,255,255,.18); }
+.cristal-oscuro img { width: 64px; height: 64px; object-fit: cover; border-radius: 14px; flex: none; padding-right: 10px; border-right: 1px solid rgba(255,255,255,.2); box-sizing: content-box; background: transparent; }
+.cristal-oscuro > span { display: flex; flex-direction: column; min-width: 0; }
+.cristal-oscuro b { font-size: 1.25rem; }
+.cristal-oscuro b.grande2 { font-size: 2.1rem; line-height: 1; }
+.cristal-oscuro > span > span { font-size: .85rem; color: #cfe3ff; line-height: 1.2; }
+.cristal-oscuro > i { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.12); transform: rotate(-90deg); }
+.cristal-oscuro > i .ico { width: 14px; height: 14px; }
+.menu-cristal { display: flex; flex-direction: column; gap: 10px; }
+.fila-cristal { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 20px; text-decoration: none; color: #fff; font-size: 1.08rem; font-weight: 600;
+  background: linear-gradient(100deg, #173e78, #2a5aa0 60%, #6f8fc8); border: 1px solid rgba(160, 210, 255, .45);
+  box-shadow: 0 8px 22px rgba(20, 60, 130, .25), inset 0 1px 0 rgba(255,255,255,.25); }
+.fila-cristal > span:not(.fila-cristal-ico):not(.globo) { flex: 1; }
+.fila-cristal-ico .ico { width: 34px; height: 34px; color: #5ef2ea; filter: drop-shadow(0 0 6px rgba(94, 242, 234, .7)); stroke-width: 2.2; }
+.fila-cristal .flecha-der { color: #fff; width: 22px; height: 22px; }
+.fila-cristal .globo { flex: none; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: #ef4444; color: #fff; font-size: .75rem; display: grid; place-items: center; }
+
+/* Barra de abajo flotante, redondeada y de cristal */
+.nav-inferior { left: 10px; right: 10px; bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 28px; padding: 6px;
+  background: color-mix(in srgb, var(--tarjeta) 82%, transparent); border: 1px solid color-mix(in srgb, var(--acento-2) 22%, var(--borde));
+  box-shadow: 0 10px 30px rgba(20, 60, 120, .18); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+.nav-inferior a.activa { border-radius: 22px; background: color-mix(in srgb, #2ee6dc 22%, var(--tarjeta)); box-shadow: 0 0 0 1px color-mix(in srgb, #2ee6dc 45%, transparent), 0 6px 18px color-mix(in srgb, #2ee6dc 35%, transparent); }
+main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+:root[data-tema="oscuro"] .boton-cristal, :root[data-tema="oscuro"] .boton-redondo, :root[data-tema="oscuro"] .caja-cristal { box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.perfil-avatar .avatar-inicial { background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 40'%3E%3Cpolyline points='0,22 30,22 36,22 42,6 50,36 56,22 100,22' fill='none' stroke='%235ef2ea' stroke-width='2.5' stroke-linejoin='round' opacity='.55'/%3E%3C/svg%3E") center / 80% no-repeat,
+  radial-gradient(circle at 40% 30%, #1f63d6, #0a2a6b 75%); }

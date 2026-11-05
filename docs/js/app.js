@@ -79,7 +79,10 @@ function cita(doc, etiqueta, pagina) {
  * retrato de Finlay, nombre, "ESTUDIO MÉDICO" y el menú ☰.
  */
 function poner(titulo, html, atras = null, opciones = {}) {
-  if (opciones.marca) {
+  if (opciones.sinBarra) {
+    $cabecera.className = "barra barra-oculta";
+    $cabecera.innerHTML = "";
+  } else if (opciones.marca) {
     // Cabecera de marca del diseño nuevo: logo, "Finlay" y tu foto (lleva al perfil)
     $cabecera.className = "barra marca2";
     $cabecera.innerHTML = `${atras ? `<button class="atras" data-accion="volver" data-destino="${esc(atras)}" aria-label="Atrás">${ico("atras")}</button>` : ""}
@@ -88,9 +91,9 @@ function poner(titulo, html, atras = null, opciones = {}) {
   } else if (titulo === null) {
     $cabecera.className = "barra marca";
     $cabecera.innerHTML = `<a href="#/perfil" class="marca-foto">${htmlAvatar("marca-retrato")}</a>
-      <div class="marca-texto"><span class="marca-nombre">Finlay</span><span class="marca-sub">Estudio Médico</span>
+      <div class="marca-texto"><span class="marca-nombre">Finlay<svg class="marca-pulso" viewBox="0 0 60 24" aria-hidden="true"><polyline points="0,13 18,13 23,4 29,21 34,13 60,13"/></svg></span><span class="marca-sub">Estudio Médico</span>
         <span class="marca-estado"><i></i>Funciona sin internet</span></div>
-      <a class="btn-icono" href="#/ajustes" aria-label="Configuración">${ico("ajustes")}</a>`;
+      <a class="btn-icono boton-cristal" href="#/ajustes" aria-label="Configuración">${ico("ajustes")}</a>`;
   } else {
     $cabecera.className = "barra";
     $cabecera.innerHTML = `${atras ? `<button class="atras" data-accion="volver" data-destino="${esc(atras)}" aria-label="Atrás">${ico("atras")}</button>` : ""}
@@ -283,7 +286,7 @@ async function vistaInicio() {
   if (lista.length) {
     const docRep = lista[0].doc || docs.find((d) => d.id === lista[0].docId);
     const [anio, nombreA] = (docRep?.asignaturas[0] || "|").split("|");
-    plan.push(`<a class="tarjeta plan-tarjeta" href="#/repaso">${htmlMiniatura(nombreA || "", anio)}
+    plan.push(`<a class="tarjeta plan-tarjeta" href="#/repaso"><img class="miniatura miniatura-dibujo" src="iconos/dis/cerebro2.webp" alt="">
       <span class="asig-cuerpo"><span class="asig-nombre">Repaso del día</span>
       <span class="sub">${lista.length} preguntas · unos ${Math.max(1, Math.round(lista.length * 0.6))} min</span></span>
       <span class="flecha-circulo">${ico("chevron")}</span></a>`);
@@ -301,7 +304,7 @@ async function vistaInicio() {
       <span class="flecha-circulo">${ico("chevron")}</span></a>`);
   }
   plan.push(`<a class="tarjeta plan-tarjeta" href="${lista.length ? "#/repaso" : "#/examen"}">
-      <span class="icono-caja">${ico("trofeo")}</span>
+      <img class="miniatura plan-trofeo" src="iconos/dis/trofeo.webp" alt="">
       <span class="asig-cuerpo"><span class="asig-nombre">Meta de hoy: ${r.hoy.preguntas} de ${meta} preguntas</span>
       <span class="barra-progreso"><span class="en-camino" style="width:${pctMeta}%"></span></span></span>
       <span class="flecha-circulo">${ico("chevron")}</span></a>`);
@@ -317,34 +320,37 @@ async function vistaInicio() {
   poner(null, `
     ${pedirNombre}
     <section class="saludo2">
+      <span class="marca-agua" aria-hidden="true">⚕</span>
       <div><h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""} <span class="mano">👋</span></h2>
       <p class="animo">${r.hoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p></div>
-      <a class="racha-fuego ${r.racha ? "" : "apagado"}" href="#/progreso/logros" style="--tam:${(1 + Math.min(r.racha, 30) / 30).toFixed(2)}"
+      <a class="racha-fuego caja-cristal ${r.racha ? "" : "apagado"}" href="#/progreso/logros" style="--tam:${(1 + Math.min(r.racha, 30) / 30).toFixed(2)}"
         title="${r.racha} días seguidos"><span class="fuego">🔥</span><b>${r.racha}</b><span>día${r.racha === 1 ? "" : "s"}</span></a>
     </section>
-    <section class="tarjeta progreso-general">
-      <div class="pg-cabeza"><span class="pg-titulo">Tu progreso</span>
-        <span class="pg-pestanas" role="tablist">
-          <button role="tab" data-accion="pg-ver" data-ver="hoy" class="${verPg === "hoy" ? "activa" : ""}">Hoy</button>
-          <button role="tab" data-accion="pg-ver" data-ver="total" class="${verPg === "total" ? "activa" : ""}">Todo el tiempo</button>
-        </span></div>
-      <a class="pg-fila" data-panel="hoy" href="#/progreso" ${verPg === "hoy" ? "" : "hidden"}>${htmlAnilloPct(pctMeta, "meta de hoy")}
-        <span class="pg-datos">
-          <span>${ico("reloj")}<b>${tiempo.textoMinutos(minutos(segHoy))}</b><span>Estudio hoy</span></span>
-          <span>${ico("check")}<b>${r.hoy.preguntas}</b><span>Preguntas hoy · ${r.hoy.correctas} bien</span></span>
-          <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
+    <section class="tarjeta progreso-general pg2">
+      <div class="pg-pestanas3" role="tablist">
+        <a class="pg-tab pg-tab-titulo" href="#/progreso">${ico("tendencia")}<span>Tu progreso</span></a>
+        <button role="tab" class="pg-tab ${verPg === "hoy" ? "activa" : ""}" data-accion="pg-ver" data-ver="hoy">${ico("calendario")}<span>Hoy</span></button>
+        <button role="tab" class="pg-tab ${verPg === "total" ? "activa" : ""}" data-accion="pg-ver" data-ver="total">${ico("historial")}<span>Todo el tiempo</span></button>
+      </div>
+      <a class="pg-fila" data-panel="hoy" href="#/progreso" ${verPg === "hoy" ? "" : "hidden"}>${htmlAnilloPct(pctMeta, "meta de hoy", "diana")}
+        <span class="pg-datos pg-datos2">
+          <span class="dato-azul"><i>${ico("reloj")}</i><b>${tiempo.textoMinutos(minutos(segHoy))}</b><span>Estudio hoy</span></span>
+          <span class="dato-verde"><i>${ico("check")}</i><b>${r.hoy.preguntas}</b><span>Preguntas hoy · ${r.hoy.correctas} bien</span></span>
+          <span class="dato-naranja"><i>🔥</i><b>${r.racha}</b><span>Días racha</span></span>
         </span></a>
-      <a class="pg-fila" data-panel="total" href="#/progreso" ${verPg === "total" ? "" : "hidden"}>${htmlAnilloPct(r.pct, "dominado")}
-        <span class="pg-datos">
-          <span>${ico("reloj")}<b>${tiempo.textoMinutos(minutos(segTotal))}</b><span>Tiempo en la app</span></span>
-          <span>${ico("estudiar")}<b>${docs.length}</b><span>Temas · ${r.respondidas} respuestas</span></span>
-          <span>${ico("examen")}<b>${r.examenes.length}</b><span>Evaluaciones</span></span>
+      <a class="pg-fila" data-panel="total" href="#/progreso" ${verPg === "total" ? "" : "hidden"}>${htmlAnilloPct(r.pct, "dominado", "grafica")}
+        <span class="pg-datos pg-datos2">
+          <span class="dato-azul"><i>${ico("reloj")}</i><b>${tiempo.textoMinutos(minutos(segTotal))}</b><span>Tiempo en la app</span></span>
+          <span class="dato-verde"><i>${ico("estudiar")}</i><b>${docs.length}</b><span>Temas · ${r.respondidas} respuestas</span></span>
+          <span class="dato-morado"><i>${ico("examen")}</i><b>${r.examenes.length}</b><span>Evaluaciones</span></span>
         </span></a>
-      <p class="pg-nota sub">${verPg === "hoy" ? "Se reinicia cada día a las 12 de la noche." : "Todo lo que has estudiado desde que usas Finlay."}</p>
+      <p class="pg-nota">${ico(verPg === "hoy" ? "luna" : "historial")}<span>${verPg === "hoy" ? "Se reinicia cada día a las 12 de la noche." : "Todo lo que has estudiado desde que usas Finlay."}</span></p>
     </section>
-    <a class="btn btn-grande" href="${continuar}"><span>Continuar estudiando
-      ${docUltimo ? `<small>${esc(docUltimo.nombre)}</small>` : ""}</span>${ico("chevron")}</a>
-    <div class="titulo-seccion"><h2>Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
+    <a class="btn-continuar" href="${continuar}">
+      <span class="btn-continuar-play">${ico("play")}</span>
+      <span class="btn-continuar-texto"><b>Continuar estudiando</b>${docUltimo ? `<small>${esc(docUltimo.nombre)}</small>` : ""}</span>
+      <span class="btn-continuar-flecha">${ico("chevron")}</span></a>
+    <div class="titulo-seccion"><h2>${ico("barras", "ico-titulo")}Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
     ${plan.join("")}
     <div class="titulo-seccion"><h2>Tus asignaturas</h2><a href="#/temas">Ver todas ${ico("chevron")}</a></div>
     <div class="lista-asig">${tarjetas.join("")}</div>
@@ -360,8 +366,8 @@ async function vistaTemas(filtro) {
   else guardarPref("filtroAnio", filtro === "todas" ? "" : filtro);
   const asigs = await db.listarAsignaturas();
   const docs = await db.listarDocumentos();
-  const chips = [["todas", "Todas"], ...ANIOS.map((n, i) => [String(i + 1), n])]
-    .map(([v, t]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="#/temas/${v}">${t}</a>`).join("");
+  const chips = [["todas", "Todos", "cuadricula"], ...ANIOS.map((n, i) => [String(i + 1), n, ESTILO_ANIO[i][0]])]
+    .map(([v, t, i]) => `<a class="chip-filtro ${v === filtro ? "activo" : ""}" href="#/temas/${v}">${ico(i)}${t}</a>`).join("");
   const elegidas = asigs
     .filter((a) => filtro === "todas" || a.anio === Number(filtro))
     .sort((a, b) => a.anio - b.anio || (a.semestre ?? 9) - (b.semestre ?? 9) || a.nombre.localeCompare(b.nombre, "es"));
@@ -375,20 +381,30 @@ async function vistaTemas(filtro) {
     const suyos = docs.filter((d) => d.asignaturas.includes(a.id));
     const c = suyos.filter((d) => d.tipo !== "libro").length;
     const preg = suyos.reduce((s, d) => s + (d.cuestionario?.length || 0), 0);
-    lista += `<a class="tarjeta asig-tarjeta" href="${enlaceAsig(a.id)}">${htmlMiniatura(a.nombre, a.anio)}
-      <span class="asig-cuerpo"><span class="asig-nombre">${esc(a.nombre)}</span>
-      ${descripcionAsignatura(a.nombre, a.anio) ? `<span class="asig-desc">${esc(descripcionAsignatura(a.nombre, a.anio))}</span>` : ""}
-      <span class="asig-cuenta">${suyos.length ? `${c} conferencias y talleres${preg ? ` · ${preg} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
-      ${ico("chevron", "flecha-der")}</a>`;
+    const imgA = imagenAsignatura(a.nombre, a.anio);
+    lista += `<a class="tema-tarjeta" href="${enlaceAsig(a.id)}">
+      <span class="tema-img">${imgA ? `<img src="${imgA}" alt="" loading="lazy">` : ico("libro")}</span>
+      <span class="tema-cuerpo"><b class="tema-nombre">${esc(a.nombre)}</b>
+        ${descripcionAsignatura(a.nombre, a.anio) ? `<span class="tema-desc">${esc(descripcionAsignatura(a.nombre, a.anio))}</span>` : ""}
+        <span class="tema-cuenta">${ico("libro")}${suyos.length ? `${c} conferencia${c === 1 ? "" : "s"}${preg ? ` <i>•</i> ${preg} preguntas` : ""}` : "Pronto: conferencias y cuestionarios"}</span></span>
+      <span class="flecha-circulo">${ico("chevron")}</span></a>`;
   }
   poner("Temas", `
-    <form class="buscador" data-ambito="todo">
-      <input name="q" type="search" placeholder="Buscar en toda la carrera…" autocomplete="off" required>
-      <button class="btn" aria-label="Buscar">${ico("buscar")}</button>
+    <section class="hero-temas">
+      <img class="hero-temas-libro" src="iconos/dis/libro.webp" alt="">
+      <div class="hero-temas-texto"><h1 class="hero-titulo">Temas</h1><span class="hero-raya corta"></span><p class="hero-lema">Explora y estudia por áreas</p></div>
+      <div class="hero-botones">
+        <button class="boton-redondo" data-accion="enfocar-busqueda" aria-label="Buscar">${ico("buscar")}</button>
+        <a class="boton-redondo" href="#/anio/${filtro === "todas" ? 1 : filtro}" aria-label="Ver el año por semestres">${ico("ajustes2")}</a>
+      </div>
+    </section>
+    <form class="buscador buscador-grande" data-ambito="todo">
+      <span class="buscador-lupa">${ico("buscar")}</span>
+      <input name="q" type="search" placeholder="Buscar temas…" autocomplete="off" required>
     </form>
-    <nav class="filtros" aria-label="Filtrar por año">${chips}</nav>
+    <nav class="filtros filtros-iconos" aria-label="Filtrar por año">${chips}</nav>
     ${lista || `<p class="vacio">Todavía no hay asignaturas en este año.</p>`}
-    <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>`);
+    <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>`, null, { sinBarra: true });
   document.querySelector(".chip-filtro.activo")?.scrollIntoView({ inline: "center", block: "nearest" });
 }
 
@@ -632,30 +648,35 @@ async function vistaPerfil() {
   const fila = (href, icono, texto, extra = "") =>
     `<a class="menu-fila" href="${href}">${ico(icono)}<span>${texto}</span>${extra}${ico("chevron", "flecha-der")}</a>`;
   poner("Perfil", `
+    <div class="perfil-titulo"><h1>Perfil</h1><button class="boton-cristal" data-accion="menu" aria-label="Menú">${ico("menu")}</button></div>
+    <span class="marca-agua perfil-agua" aria-hidden="true">⚕</span>
     <section class="perfil-arriba">
       <label class="perfil-avatar" title="Cambiar foto">${htmlAvatar("avatar-grande", true)}
         <span class="avatar-lapiz">${ico("lapiz")}</span>
         <input type="file" id="aj-foto" accept="image/*" hidden></label>
       <b class="perfil-nombre">${esc(nombre || "Estudiante")}</b>
-      <span class="sub">${r.nivel.emoji} ${esc(r.nivel.nombre)}</span>
-      <span class="perfil-nivel"><span class="nivel-barra"><span style="width:${r.nivel.pct}%"></span></span>
-        <span class="sub">${r.nivel.siguiente ? `${r.nivel.faltan} puntos para ${esc(r.nivel.siguiente.nombre)}` : "¡Nivel máximo!"}</span></span>
+      <span class="perfil-pildora"><img src="iconos/dis/mochila.webp" alt=""> ${esc(r.nivel.nombre)}</span>
+      <span class="perfil-nivel2"><span class="nivel-barra brillo"><span style="width:${Math.max(4, r.nivel.pct)}%"></span></span>
+        <span class="perfil-faltan">${r.nivel.siguiente ? `${r.nivel.faltan} puntos para ${esc(r.nivel.siguiente.nombre.toLowerCase())}` : "¡Nivel máximo!"}</span></span>
     </section>
-    <div class="perfil-cifras">
-      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">${r.nivel.emoji}</span><span><b>Nivel ${r.nivel.n}</b><span class="sub">${esc(r.nivel.nombre)}</span></span></a>
-      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">💎</span><span><b>${textoPuntos(r.puntos)}</b><span class="sub">Puntos</span></span></a>
+    <div class="perfil-cifras2">
+      <a class="cristal-oscuro" href="#/progreso/logros"><img src="iconos/dis/mochila.webp" alt=""><span><b>Nivel ${r.nivel.n}</b><span>${esc(r.nivel.nombre)}</span></span><i>${ico("chevron")}</i></a>
+      <a class="cristal-oscuro" href="#/progreso/logros"><img src="iconos/dis/diamante.webp" alt=""><span><b class="grande2">${textoPuntos(r.puntos)}</b><span>Puntos</span></span><i>${ico("chevron")}</i></a>
     </div>
-    <nav class="tarjeta menu-lista">
-      ${fila("#/progreso", "grafica", "Mi progreso")}
-      ${fila("#/biblioteca/favoritos", "corazon", "Mis favoritos", favoritos().length ? `<span class="globo">${favoritos().length}</span>` : "")}
-      ${fila("#/copia", "copia", "Copia y compartir")}
-      ${fila("#/planes", "calendario", "Plan para el examen")}
-      ${fila("#/ajustes", "ajustes", "Configuración")}
-      ${fila("#/ayuda", "ayuda", "Ayuda: cómo usar Finlay")}
+    <nav class="menu-cristal">
+      ${filaCristal("#/progreso", "barras", "Mi progreso")}
+      ${filaCristal("#/biblioteca/favoritos", "corazon", "Mis favoritos", favoritos().length ? `<span class="globo">${favoritos().length}</span>` : "")}
+      ${filaCristal("#/copia", "documento", "Copia y compartir")}
+      ${filaCristal("#/planes", "calendario", "Plan para el examen")}
+      ${filaCristal("#/ajustes", "ajustes", "Configuración")}
+      ${filaCristal("#/ayuda", "ayuda", "Ayuda: cómo usar Finlay")}
     </nav>
     <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
-    <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`);
+    <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`, null, { sinBarra: true });
   mostrarBotonInstalar();
+}
+function filaCristal(href, icono, texto, extra = "") {
+  return `<a class="fila-cristal" href="${href}"><span class="fila-cristal-ico">${ico(icono)}</span><span>${texto}</span>${extra}${ico("chevron", "flecha-der")}</a>`;
 }
 
 async function vistaAjustes() {
@@ -698,7 +719,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 2.0 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 2.1 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -2138,6 +2159,10 @@ document.addEventListener("click", async (ev) => {
     mostrarPregunta(Number(b.dataset.i));
   } else if (accion === "menu") {
     abrirMenu();
+  } else if (accion === "enfocar-busqueda") {
+    const q = document.querySelector(".buscador input[name=q]");
+    q?.scrollIntoView({ block: "center", behavior: "smooth" });
+    q?.focus();
   } else if (accion === "biblio-ajustes") {
     const panel = document.querySelector(".biblio-ajustes");
     panel.hidden = !panel.hidden;
@@ -2155,7 +2180,7 @@ document.addEventListener("click", async (ev) => {
     const caja = b.closest(".progreso-general");
     caja.querySelectorAll("[data-accion=pg-ver]").forEach((x) => x.classList.toggle("activa", x === b));
     caja.querySelectorAll("[data-panel]").forEach((x) => (x.hidden = x.dataset.panel !== b.dataset.ver));
-    caja.querySelector(".pg-nota").textContent = b.dataset.ver === "hoy" ? "Se reinicia cada día a las 12 de la noche." : "Todo lo que has estudiado desde que usas Finlay.";
+    caja.querySelector(".pg-nota").innerHTML = b.dataset.ver === "hoy" ? `${ico("luna")}<span>Se reinicia cada día a las 12 de la noche.</span>` : `${ico("historial")}<span>Todo lo que has estudiado desde que usas Finlay.</span>`;
   } else if (accion === "tema") {
     cambiarTema(b.dataset.tema);
   } else if (accion === "favorito") {

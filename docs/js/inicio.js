@@ -119,7 +119,7 @@ export function insignias({ racha, totalRespondidas, temasDominados, mejorNota }
 }
 
 // ---------- Anillo grande de porcentaje (progreso general) ----------
-export function htmlAnilloPct(pct, texto = "") {
+export function htmlAnilloPct(pct, texto = "", icono = "") {
   const r = 44;
   const c = 2 * Math.PI * r;
   return `<div class="anillo anillo-pct" role="img" aria-label="${pct}% ${esc(texto)}">
@@ -128,7 +128,7 @@ export function htmlAnilloPct(pct, texto = "") {
       <circle cx="50" cy="50" r="${r}" class="anillo-valor" stroke-dasharray="${c.toFixed(1)}"
         stroke-dashoffset="${(c * (1 - Math.min(100, pct) / 100)).toFixed(1)}"/>
     </svg>
-    <div class="anillo-texto"><b>${pct}%</b>${texto ? `<span>${esc(texto)}</span>` : ""}</div>
+    <div class="anillo-texto"><b>${pct}%</b>${texto ? `<span>${esc(texto)}</span>` : ""}${icono ? ico(icono, "anillo-ico2") : ""}</div>
   </div>`;
 }
 
