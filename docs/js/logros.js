@@ -210,6 +210,7 @@ function tono(notas, paso = 0.12, volumen = 0.16) {
   try {
     if (localStorage.getItem("finlay.sonido") === "0") return;
     audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    audio.resume?.();
     notas.forEach((f, i) => {
       const o = audio.createOscillator();
       const g = audio.createGain();
@@ -275,7 +276,7 @@ export function celebrar(datos) {
   };
   requestAnimationFrame(() => capa.classList.add("visible"));
   if (pct >= 70) tono([523, 659, 784, 1047, 784, 1047], 0.13, 0.18);
-  else tono([392, 523, 659], 0.16, 0.14);
+  else tono([523, 440, 349], 0.2, 0.2); // nota baja: tres notas que bajan
   confeti(capa.querySelector("canvas"), pct >= 90 ? 160 : pct >= 70 ? 100 : 45, pct >= 70);
   return capa;
 }

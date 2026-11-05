@@ -528,7 +528,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 1.9 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 1.9.1 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -895,20 +895,26 @@ function sonar(bien) {
   if (pref("sonido", "1") !== "1") return;
   try {
     audio ||= new (window.AudioContext || window.webkitAudioContext)();
-    const notas = bien ? [660, 880] : [220];
-    notas.forEach((f, i) => {
+    audio.resume?.();
+    // Acierto: dos notas que suben. Error: "buzz-buzz" que baja (tono medio, que sí suena en el altavoz del teléfono)
+    const notas = bien
+      ? [{ f: 660, tipo: "sine", vol: 0.25, dur: 0.18 }, { f: 880, tipo: "sine", vol: 0.25, dur: 0.22 }]
+      : [{ f: 466, tipo: "square", vol: 0.12, dur: 0.16 }, { f: 349, tipo: "square", vol: 0.12, dur: 0.28 }];
+    notas.forEach((n, i) => {
       const o = audio.createOscillator();
       const g = audio.createGain();
-      const t = audio.currentTime + i * 0.12;
-      o.type = "sine";
-      o.frequency.value = f;
+      const t = audio.currentTime + i * (bien ? 0.12 : 0.17);
+      o.type = n.tipo;
+      o.frequency.value = n.f;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + (bien ? 0.18 : 0.3));
+      g.gain.exponentialRampToValueAtTime(n.vol, t + 0.015);
+      g.gain.setValueAtTime(n.vol, t + n.dur * 0.6);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + n.dur);
       o.connect(g).connect(audio.destination);
       o.start(t);
-      o.stop(t + 0.35);
+      o.stop(t + n.dur + 0.05);
     });
+    navigator.vibrate?.(bien ? 0 : [60, 40, 60]); // en el teléfono, además, vibra un poquito al fallar
   } catch {}
 }
 
