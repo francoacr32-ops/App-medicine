@@ -311,6 +311,20 @@ public class Principal extends Activity {
             ultimoTrozo = null;
         }
 
+        @JavascriptInterface
+        public void vibrar(int milisegundos) {
+            try {
+                android.os.Vibrator v = (android.os.Vibrator) getSystemService(VIBRATOR_SERVICE);
+                if (v == null || !v.hasVibrator()) return;
+                if (android.os.Build.VERSION.SDK_INT >= 26)
+                    v.vibrate(android.os.VibrationEffect.createWaveform(new long[]{0, milisegundos, 50, milisegundos}, -1));
+                else
+                    v.vibrate(new long[]{0, milisegundos, 50, milisegundos}, -1);
+            } catch (Exception e) {
+                // si el teléfono no deja vibrar, no pasa nada
+            }
+        }
+
         // Archivos binarios (.zip con diapositivas): llegan por trozos en base64
         @JavascriptInterface
         public void iniciarArchivo() {

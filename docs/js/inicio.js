@@ -147,13 +147,23 @@ export function iniciarContadorDeTiempo(hoy) {
     t[f] = (t[f] || 0) + 30;
     const fechas = Object.keys(t).sort();
     while (fechas.length > 90) delete t[fechas.shift()];
-    try { localStorage.setItem("finlay.tiempo", JSON.stringify(t)); } catch {}
+    // A qué hora del día se estudia (para "¿Cuándo estudias más?")
+    const horas = leerHoras();
+    const h = new Date().getHours();
+    horas[h] = (horas[h] || 0) + 30;
+    try {
+      localStorage.setItem("finlay.tiempo", JSON.stringify(t));
+      localStorage.setItem("finlay.horas", JSON.stringify(horas));
+    } catch {}
   }, 30000);
 }
-/** Segundos estudiados: en total y por día */
+function leerHoras() {
+  try { return JSON.parse(localStorage.getItem("finlay.horas") || "{}"); } catch { return {}; }
+}
+/** Segundos estudiados: en total, por día y por hora del día */
 export function tiempoDeEstudio() {
   const t = leerTiempo();
-  return { total: Object.values(t).reduce((s, x) => s + x, 0), porDia: t };
+  return { total: Object.values(t).reduce((s, x) => s + x, 0), porDia: t, porHora: leerHoras() };
 }
 export function textoTiempo(seg) {
   const h = Math.floor(seg / 3600);

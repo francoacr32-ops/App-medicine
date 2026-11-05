@@ -247,6 +247,9 @@ async function vistaInicio() {
   const meta = metaDiaria();
   const { lista } = preguntasDelRepaso(r.conPreguntas, r.respuestas, meta);
 
+  const pctMeta = Math.min(100, Math.round((r.hoy.preguntas / meta) * 100));
+  const tiempo = tiempoDeEstudio();
+  const verPg = pref("verProgreso", "hoy");
   // "Continuar estudiando": la última conferencia abierta, o el repaso, o los temas
   const docUltimo = pref("ultimo") && docs.find((d) => d.id === pref("ultimo"));
   const continuar = docUltimo ? `#/doc/${docUltimo.id}` : lista.length ? "#/repaso" : "#/temas";
@@ -273,7 +276,6 @@ async function vistaInicio() {
       <span class="sub">${que ? "Hoy: " + esc(que) : esc(nombreP)}</span></span>
       <span class="flecha-circulo">${ico("chevron")}</span></a>`);
   }
-  const pctMeta = Math.min(100, Math.round((r.hoy.preguntas / meta) * 100));
   plan.push(`<a class="tarjeta plan-tarjeta" href="${lista.length ? "#/repaso" : "#/examen"}">
       <span class="icono-caja">${ico("trofeo")}</span>
       <span class="asig-cuerpo"><span class="asig-nombre">Meta de hoy: ${r.hoy.preguntas} de ${meta} preguntas</span>
@@ -296,15 +298,26 @@ async function vistaInicio() {
       <a class="racha-fuego ${r.racha ? "" : "apagado"}" href="#/progreso/logros" style="--tam:${(1 + Math.min(r.racha, 30) / 30).toFixed(2)}"
         title="${r.racha} días seguidos"><span class="fuego">🔥</span><b>${r.racha}</b><span>día${r.racha === 1 ? "" : "s"}</span></a>
     </section>
-    <a class="tarjeta progreso-general" href="#/progreso">
-      <span class="pg-titulo">Tu progreso general</span>
-      <span class="pg-fila">${htmlAnilloPct(r.pct, "dominado")}
+    <section class="tarjeta progreso-general">
+      <div class="pg-cabeza"><span class="pg-titulo">Tu progreso</span>
+        <span class="pg-pestanas" role="tablist">
+          <button role="tab" data-accion="pg-ver" data-ver="hoy" class="${verPg === "hoy" ? "activa" : ""}">Hoy</button>
+          <button role="tab" data-accion="pg-ver" data-ver="total" class="${verPg === "total" ? "activa" : ""}">Todo el tiempo</button>
+        </span></div>
+      <a class="pg-fila" data-panel="hoy" href="#/progreso" ${verPg === "hoy" ? "" : "hidden"}>${htmlAnilloPct(pctMeta, "meta de hoy")}
         <span class="pg-datos">
-          <span><b>${docs.length}</b><span>Temas</span></span>
-          <span><b>${r.examenes.length}</b><span>Evaluaciones</span></span>
+          <span>${ico("reloj")}<b>${textoTiempo(tiempo.porDia[db.hoy()] || 0)}</b><span>Estudio hoy</span></span>
+          <span>${ico("check")}<b>${r.hoy.preguntas}</b><span>Preguntas hoy · ${r.hoy.correctas} bien</span></span>
           <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
-        </span></span>
-    </a>
+        </span></a>
+      <a class="pg-fila" data-panel="total" href="#/progreso" ${verPg === "total" ? "" : "hidden"}>${htmlAnilloPct(r.pct, "dominado")}
+        <span class="pg-datos">
+          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Tiempo en la app</span></span>
+          <span>${ico("estudiar")}<b>${docs.length}</b><span>Temas · ${r.respondidas} respuestas</span></span>
+          <span>${ico("examen")}<b>${r.examenes.length}</b><span>Evaluaciones</span></span>
+        </span></a>
+      <p class="pg-nota sub">${verPg === "hoy" ? "Se reinicia cada día a las 12 de la noche." : "Todo lo que has estudiado desde que usas Finlay."}</p>
+    </section>
     <a class="btn btn-grande" href="${continuar}"><span>Continuar estudiando
       ${docUltimo ? `<small>${esc(docUltimo.nombre)}</small>` : ""}</span>${ico("chevron")}</a>
     <div class="titulo-seccion"><h2>Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
@@ -357,12 +370,13 @@ async function vistaTemas(filtro) {
 
 // ---------- Pantalla: Progreso (estadísticas e insignias) ----------
 async function vistaProgresoGeneral(pestana = "estadisticas") {
+  if (pestana === undefined) pestana = "estadisticas";
   const r = await resumenDeEstudio();
   const lista = insignias({ racha: r.racha, totalRespondidas: r.respondidas, temasDominados: r.temasDominados,
     mejorNota: r.examenes.reduce((m, e) => Math.max(m, e.nota), 0) });
   const tiempo = tiempoDeEstudio();
   const pestanas = `<nav class="pestanas-pildora">
-    <a href="#/progreso" class="${pestana === "estadisticas" ? "activa" : ""}">Estadísticas</a>
+    <a href="#/progreso" class="${pestana !== "logros" ? "activa" : ""}">Estadísticas</a>
     <a href="#/progreso/logros" class="${pestana === "logros" ? "activa" : ""}">Logros</a></nav>`;
   if (pestana === "logros") {
     const { logros, trofeos } = juego.listaDeLogros(await contextoLogros());
@@ -397,41 +411,137 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
   for (const a of asigs) areas.push({ a, p: await progresoAsignatura(a) });
   areas.sort((x, y) => y.p.pct - x.p.pct);
   const colores = ["#2dd4cf", "#a3e635", "#c084fc", "#f2962e", "#e5408f", "#2f7ff0"];
-  // Actividad de los últimos 7 días (preguntas respondidas y minutos)
-  const dias = [];
-  const base = new Date(db.hoy() + "T12:00:00");
-  for (let k = 6; k >= 0; k--) {
-    const d = new Date(base); d.setDate(d.getDate() - k);
-    const f = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  // ---------- Actividad: últimos 7 o 30 días ----------
+  const nDias = pestana === "30" ? 30 : 7;
+  const fechaDe = (k) => {
+    const d = new Date(db.hoy() + "T12:00:00");
+    d.setDate(d.getDate() - k);
+    return { d, f: new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10) };
+  };
+  const diaDe = (k) => {
+    const { d, f } = fechaDe(k);
     const reg = r.diario.find((x) => x.fecha === f);
-    dias.push({ f, n: reg?.preguntas || 0, min: Math.round((tiempo.porDia[f] || 0) / 60),
-      letra: d.toLocaleDateString("es", { weekday: "short" }).replace(".", "") });
-  }
-  const max = Math.max(5, ...dias.map((d) => d.n + d.min));
+    return { f, d, n: reg?.preguntas || 0, ok: reg?.correctas || 0, seg: tiempo.porDia[f] || 0 };
+  };
+  const dias = [];
+  for (let k = nDias - 1; k >= 0; k--) dias.push(diaDe(k));
+  const previos = [];
+  for (let k = 2 * nDias - 1; k >= nDias; k--) previos.push(diaDe(k));
+  const suma = (l, c) => l.reduce((t, x) => t + x[c], 0);
+  const nTot = suma(dias, "n"), okTot = suma(dias, "ok"), segTot = suma(dias, "seg");
+  const activos = dias.filter((x) => x.n || x.seg >= 60).length;
+  const mejor = [...dias].sort((x, y) => y.n - x.n || y.seg - x.seg)[0];
+  const nPrev = suma(previos, "n");
+  const cambio = nPrev ? Math.round(((nTot - nPrev) / nPrev) * 100) : null;
+  const nombreDia = (x, largo = false) => x.d.toLocaleDateString("es", largo ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric" }).replace(".", "");
+  const periodo = nDias === 7 ? "la semana anterior" : "los 30 días anteriores";
+
+  // Cuándo estudias más (por franjas del día)
+  const FRANJAS = [["🌙", "Madrugada", 0, 6], ["🌅", "Mañana", 6, 12], ["☀️", "Tarde", 12, 18], ["🌆", "Noche", 18, 24]];
+  const franjas = FRANJAS.map(([e, t, de, a]) => {
+    let seg = 0;
+    for (let h = de; h < a; h++) seg += tiempo.porHora[h] || 0;
+    return { e, t, seg, rango: `${de}:00–${a === 24 ? "0" : a}:00` };
+  });
+  const maxFranja = Math.max(1, ...franjas.map((x) => x.seg));
+  const favorita = franjas.some((x) => x.seg) ? [...franjas].sort((x, y) => y.seg - x.seg)[0] : null;
+
+  // Totales de todo el tiempo
+  const e = juego.estado();
+  const diasEstudiados = new Set([...r.diario.filter((x) => x.preguntas).map((x) => x.fecha),
+    ...Object.entries(tiempo.porDia).filter(([, v]) => v >= 60).map(([f]) => f)]).size;
+  const notaMedia = r.examenes.length ? (r.examenes.reduce((t, x) => t + x.nota, 0) / r.examenes.length).toFixed(1).replace(".0", "") : "—";
+
   poner("Mi progreso", `${pestanas}
     <section class="tarjeta progreso-general sin-enlace">
       <span class="pg-fila">${htmlAnilloPct(r.pct, "Progreso total")}
         <span class="pg-datos">
           <span class="pg-racha">${ico("llama")}<b>${r.racha}</b><span>Días racha</span></span>
-          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Estudio total</span></span>
+          <span>${ico("reloj")}<b>${textoTiempo(tiempo.total)}</b><span>Tiempo en la app</span></span>
           <span>${ico("trofeo")}<b>${lista.filter((x) => x.ok).length}</b><span>Logros</span></span>
         </span></span>
     </section>
-    <div class="titulo-seccion"><h2>Tu actividad</h2><span class="sub">Últimos 7 días</span></div>
-    <div class="tarjeta actividad">${dias.map((d) => `<div class="act-dia ${d.f === db.hoy() ? "hoy" : ""}" title="${d.n} preguntas · ${d.min} min">
-        <span class="act-barra" style="height:${Math.max(4, Math.round(((d.n + d.min) / max) * 100))}%"></span>
-        <span class="act-letra">${esc(d.letra)}</span></div>`).join("")}</div>
-    <p class="nota centro">Altura = preguntas respondidas + minutos de estudio.</p>
+
+    <div class="titulo-seccion"><h2>Tu actividad</h2>
+      <span class="pg-pestanas"><a href="#/progreso" class="${nDias === 7 ? "activa" : ""}">7 días</a><a href="#/progreso/30" class="${nDias === 30 ? "activa" : ""}">30 días</a></span></div>
+    <div class="act-resumen">
+      <div class="tarjeta act-dato"><span class="sub">Preguntas</span><b>${nTot}</b>
+        <span class="act-cambio ${cambio === null ? "" : cambio >= 0 ? "sube" : "baja"}">${cambio === null ? "sin datos de antes" : `${cambio >= 0 ? "▲" : "▼"} ${Math.abs(cambio)} % que ${periodo}`}</span></div>
+      <div class="tarjeta act-dato"><span class="sub">Aciertos</span><b>${nTot ? Math.round((okTot / nTot) * 100) : 0}%</b><span class="sub">${okTot} bien · ${nTot - okTot} mal</span></div>
+      <div class="tarjeta act-dato"><span class="sub">Tiempo de estudio</span><b>${textoTiempo(segTot)}</b><span class="sub">${textoTiempo(Math.round(segTot / nDias))} por día</span></div>
+      <div class="tarjeta act-dato"><span class="sub">Días activos</span><b>${activos} <small>de ${nDias}</small></b>
+        <span class="act-puntos">${dias.map((x) => `<i class="${x.n || x.seg >= 60 ? "si" : ""}"></i>`).join("")}</span></div>
+    </div>
+    <div class="tarjeta act-grafica">
+      <div class="act-leyenda"><span><i class="ley-bien"></i>Correctas</span><span><i class="ley-mal"></i>Incorrectas</span><span><i class="ley-min"></i>Minutos</span></div>
+      ${graficaActividad(dias, nDias)}
+      <p class="act-detalle" id="act-detalle">${mejor && (mejor.n || mejor.seg)
+        ? `⭐ Tu mejor día: <b>${esc(nombreDia(mejor, true))}</b> · ${mejor.n} preguntas · ${textoTiempo(mejor.seg)}. <span class="sub">Toca una barra para ver cada día.</span>`
+        : "Todavía no hay actividad en estos días. ¡Responde unas preguntas!"}</p>
+    </div>
+
+    <h2>¿Cuándo estudias más?</h2>
+    <div class="tarjeta franjas">${franjas.map((x) => `<div class="franja ${favorita === x ? "favorita" : ""}">
+        <span class="franja-nombre">${x.e} ${x.t}<span class="sub">${x.rango}</span></span>
+        <span class="franja-barra"><span style="width:${Math.round((x.seg / maxFranja) * 100)}%"></span></span>
+        <b>${textoTiempo(x.seg)}</b></div>`).join("")}
+      <p class="sub">${favorita ? `Estudias más por la <b>${favorita.t.toLowerCase()}</b>. Repasa a esa hora: es cuando mejor te concentras.` : "Cuando uses Finlay unos días, aquí verás a qué hora estudias más."}</p></div>
+
     <h2>Áreas más fuertes</h2>
     <div class="tarjeta areas">${areas.length ? areas.map(({ a, p }, i) => `<a class="area" href="${enlaceAsig(a.id)}/progreso">
-        <span class="area-nombre">${esc(a.nombre)}</span>
+        <span class="area-nombre">${esc(a.nombre)}<span class="sub">${p.bien} de ${p.total} preguntas dominadas</span></span>
         <span class="area-barra"><span style="width:${p.pct}%;background:${colores[i % colores.length]}"></span></span><b>${p.pct}%</b></a>`).join("")
       : `<p class="vacio">Cuando respondas cuestionarios, aquí verás en qué asignaturas vas mejor.</p>`}</div>
-    <div class="cifras">
-      <div class="tarjeta cifra">${ico("check")}<b>${r.respondidas}</b><span>respondidas</span></div>
-      <div class="tarjeta cifra">${ico("trofeo")}<b>${r.respondidas ? Math.round((r.correctas / r.respondidas) * 100) : 0}%</b><span>de aciertos</span></div>
-      <div class="tarjeta cifra">${ico("examen")}<b>${r.examenes.length}</b><span>exámenes</span></div>
+
+    <h2>Todo el tiempo</h2>
+    <div class="totales">
+      <div class="tarjeta"><span>⏱</span><b>${textoTiempo(tiempo.total)}</b><span class="sub">en la app</span></div>
+      <div class="tarjeta"><span>📅</span><b>${diasEstudiados}</b><span class="sub">días estudiados</span></div>
+      <div class="tarjeta"><span>✍️</span><b>${r.respondidas}</b><span class="sub">respuestas</span></div>
+      <div class="tarjeta"><span>🎯</span><b>${r.respondidas ? Math.round((r.correctas / r.respondidas) * 100) : 0}%</b><span class="sub">de aciertos</span></div>
+      <div class="tarjeta"><span>📝</span><b>${r.examenes.length}</b><span class="sub">exámenes · nota media ${notaMedia}</span></div>
+      <div class="tarjeta"><span>🏁</span><b>${e.pruebas}</b><span class="sub">pruebas terminadas</span></div>
+      <div class="tarjeta"><span>📖</span><b>${e.leidas.length}</b><span class="sub">conferencias leídas completas</span></div>
+      <div class="tarjeta"><span>💎</span><b>${textoPuntos(e.puntos)}</b><span class="sub">puntos · ${esc(r.nivel.nombre)}</span></div>
     </div>`, "#/perfil");
+  vistaProgresoGeneral.dias = dias;
+}
+
+/** Gráfica de actividad: barras (correctas + incorrectas) y línea de minutos, con ejes */
+function graficaActividad(dias, nDias) {
+  const W = 340, H = 220, izq = 30, der = 30, arriba = 24, abajo = 30;
+  const ancho = W - izq - der, alto = H - arriba - abajo;
+  const redondo = (v) => { const p = [5, 10, 20, 25, 50, 100, 200, 500, 1000]; return p.find((x) => x >= v) || Math.ceil(v / 1000) * 1000; };
+  const maxN = redondo(Math.max(4, ...dias.map((x) => x.n)));
+  const maxM = redondo(Math.max(4, ...dias.map((x) => Math.round(x.seg / 60))));
+  const paso = ancho / dias.length;
+  const bw = Math.max(3, paso * (nDias === 7 ? 0.5 : 0.62));
+  const y = (v, max) => arriba + alto - (v / max) * alto;
+  let svg = "";
+  for (let i = 0; i <= 4; i++) {
+    const yy = arriba + (alto * i) / 4;
+    svg += `<line x1="${izq}" y1="${yy}" x2="${W - der}" y2="${yy}" class="g-rejilla"/>
+      <text x="${izq - 5}" y="${yy + 3}" text-anchor="end" class="g-eje">${Math.round(maxN * (1 - i / 4))}</text>
+      <text x="${W - der + 5}" y="${yy + 3}" class="g-eje g-eje-min">${Math.round(maxM * (1 - i / 4))}</text>`;
+  }
+  const puntos = [];
+  let toques = "";
+  dias.forEach((x, i) => {
+    const cx = izq + paso * i + paso / 2;
+    const yOk = y(x.ok, maxN), yN = y(x.n, maxN);
+    if (x.ok) svg += `<rect x="${cx - bw / 2}" y="${yOk}" width="${bw}" height="${arriba + alto - yOk}" rx="${Math.min(4, bw / 3)}" class="g-bien"/>`;
+    if (x.n - x.ok) svg += `<rect x="${cx - bw / 2}" y="${yN}" width="${bw}" height="${yOk - yN}" rx="${Math.min(4, bw / 3)}" class="g-mal"/>`;
+    puntos.push([cx, y(Math.round(x.seg / 60), maxM)]);
+    const etiqueta = nDias === 7 ? x.d.toLocaleDateString("es", { weekday: "short" }).replace(".", "")
+      : i % 5 === 4 || i === dias.length - 1 ? String(x.d.getDate()) : "";
+    if (etiqueta) svg += `<text x="${cx}" y="${H - abajo + 16}" text-anchor="middle" class="g-dia ${i === dias.length - 1 ? "g-hoy" : ""}">${esc(etiqueta)}</text>`;
+    toques += `<rect x="${izq + paso * i}" y="${arriba}" width="${paso}" height="${alto + 20}" class="g-toque" data-accion="act-dia" data-i="${i}"/>`;
+  });
+  const linea = `<polyline points="${puntos.map((p) => p.join(",")).join(" ")}" class="g-linea"/>` +
+    (nDias === 7 ? puntos.map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" class="g-punto"/>`).join("") : "");
+  return `<svg class="g-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Preguntas y minutos de estudio por día">
+    <text x="4" y="9" class="g-eje g-titulo-eje">preg.</text><text x="${W - 4}" y="9" text-anchor="end" class="g-eje g-eje-min g-titulo-eje">min</text>
+    ${svg}${linea}${toques}</svg>`;
 }
 
 // ---------- Pantalla: Evaluaciones (repaso, examen y plan) ----------
@@ -528,7 +638,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 1.9.1 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 1.9.2 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -914,7 +1024,8 @@ function sonar(bien) {
       o.start(t);
       o.stop(t + n.dur + 0.05);
     });
-    navigator.vibrate?.(bien ? 0 : [60, 40, 60]); // en el teléfono, además, vibra un poquito al fallar
+    // En el teléfono, además, vibra un poquito al fallar
+    if (!bien) window.FinlayAndroid?.vibrar ? window.FinlayAndroid.vibrar(70) : navigator.vibrate?.([60, 40, 60]);
   } catch {}
 }
 
@@ -1059,6 +1170,20 @@ async function responder(k, valor) {
   const { doc, i } = enPantalla[k];
   const p = doc.cuestionario[i];
   const tarjeta = document.getElementById("p" + k);
+  if (modo === "examen" && vistaExamen.alMomento) {
+    // Examen corregido al momento: se corrige ya, con sonido; al entregar se cuenta tal cual
+    if (resultadosExamen.has(k)) return;
+    const r = corregir(p, tarjeta, valor);
+    if (!r) return aviso("Responde todas las partes antes de comprobar.");
+    sonar(r.correcta);
+    resultadosExamen.set(k, r);
+    elegidasExamen.set(k, valor ?? true);
+    if (p.tipo !== "abierta") mostrarCorreccion(k, r);
+    preguntaRespondida();
+    alResponder(k);
+    if (sesion) actualizarMapa();
+    return;
+  }
   if (modo === "examen") {
     // En el examen solo se marca la elección; se corrige todo al entregar
     elegidasExamen.set(k, valor);
@@ -1278,9 +1403,10 @@ async function vistaExamenInicio(ambitoInicial) {
           <label>¿De qué?<select name="ambito">${opciones}</select></label>
           <label>¿Cuántas preguntas?<select name="n">${[10, 20, 30, 50].map((n) => `<option ${n === 20 ? "selected" : ""}>${n}</option>`).join("")}</select></label>
           <label class="check"><input type="checkbox" name="reloj" checked> Con cronómetro (1 minuto y medio por pregunta)</label>
+          <label class="check"><input type="checkbox" name="momento" ${pref("examenMomento", "1") === "1" ? "checked" : ""}> Corregir cada respuesta al momento (con sonido al acertar o fallar)</label>
           <button class="btn ancho">📝 Empezar examen</button>
         </form>
-        <p class="nota">Las respuestas se corrigen al entregar. Nota según la escala cubana: 5 Excelente (90 % o más), 4 Bien (80 %), 3 Aprobado (70 %), 2 Desaprobado.</p>
+        <p class="nota">Si quitas «Corregir al momento», el examen es como el real: no sabes si fallaste hasta entregar. Nota según la escala cubana: 5 Excelente (90 % o más), 4 Bien (80 %), 3 Aprobado (70 %), 2 Desaprobado.</p>
         ${historial.length ? `<h2>Tus últimos exámenes</h2><ul class="docs">${historial
           .map((e) => `<li class="doc"><span><b class="nota-num n${e.nota}">${e.nota}</b> ${esc(e.titulo)}</span>
              <span class="sub">${new Date(e.fecha).toLocaleDateString("es")} · ${e.porcentaje} % · ${e.cantidad} preguntas</span></li>`)
@@ -1294,8 +1420,11 @@ async function vistaExamenInicio(ambitoInicial) {
 
 let relojExamen = null;
 
-async function vistaExamen(ambito, cantidad, conReloj) {
+const resultadosExamen = new Map(); // respuestas ya corregidas al momento (k → resultado)
+async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   vistaExamen.puntosInicio = juego.estado().puntos;
+  vistaExamen.alMomento = alMomento;
+  resultadosExamen.clear();
   const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length);
   const lista = preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
@@ -1314,6 +1443,7 @@ async function vistaExamen(ambito, cantidad, conReloj) {
     "#/examen"
   );
   $app.classList.add("modo-examen");
+  $app.classList.toggle("examen-al-momento", alMomento);
   iniciarSesion(true);
   vistaExamen.datos = { titulo, ambito, lista };
   if (conReloj) {
@@ -1362,7 +1492,9 @@ async function entregarExamen() {
     const inmediata = esInmediata(p);
     let r;
     let sinResponder = false;
-    if (inmediata && !elegidasExamen.has(k)) {
+    if (resultadosExamen.has(k)) {
+      r = resultadosExamen.get(k);
+    } else if (inmediata && !elegidasExamen.has(k)) {
       // Sin responder: se muestra cuál era la correcta
       corregir(p, tarjeta, p.tipo === "multiple" ? "-1" : String(!p.respuesta));
       tarjeta.querySelectorAll(".mal").forEach((x) => x.classList.remove("mal"));
@@ -1377,7 +1509,7 @@ async function entregarExamen() {
       }
     }
     puntos += r.aciertos / r.total;
-    mostrarCorreccion(k, r, sinResponder);
+    if (!resultadosExamen.has(k) || p.tipo === "abierta") mostrarCorreccion(k, r, sinResponder);
     await db.guardarRespuesta(doc.id, i, r.correcta);
     if (!r.correcta) fallados.set(doc.id, { doc, n: (fallados.get(doc.id)?.n || 0) + 1 });
   }
@@ -1824,7 +1956,8 @@ document.addEventListener("submit", async (ev) => {
     guardarPref("nombre", f.querySelector("input").value.trim());
     router();
   } else if (f.classList.contains("form-examen")) {
-    location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}`;
+    guardarPref("examenMomento", f.momento.checked ? "1" : "0");
+    location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}&momento=${f.momento.checked ? 1 : 0}`;
   } else if (f.classList.contains("form-plan")) {
     const id = await db.guardarPlan({ asignatura: f.asignatura.value, nombre: f.nombre.value.trim(), fecha: f.fecha.value });
     location.hash = `#/plan/${id}`;
@@ -1908,6 +2041,20 @@ document.addEventListener("click", async (ev) => {
     mostrarPregunta(Number(b.dataset.i));
   } else if (accion === "menu") {
     abrirMenu();
+  } else if (accion === "act-dia") {
+    const x = vistaProgresoGeneral.dias?.[Number(b.dataset.i)];
+    if (x) {
+      document.querySelectorAll(".g-toque.elegido").forEach((t) => t.classList.remove("elegido"));
+      b.classList.add("elegido");
+      document.getElementById("act-detalle").innerHTML = `📅 <b>${esc(x.d.toLocaleDateString("es", { weekday: "long", day: "numeric", month: "long" }))}</b> · ` +
+        (x.n || x.seg ? `${x.n} preguntas (${x.ok} bien${x.n ? `, ${Math.round((x.ok / x.n) * 100)} %` : ""}) · ${textoTiempo(x.seg)} de estudio` : "no estudiaste este día");
+    }
+  } else if (accion === "pg-ver") {
+    guardarPref("verProgreso", b.dataset.ver === "hoy" ? "" : b.dataset.ver);
+    const caja = b.closest(".progreso-general");
+    caja.querySelectorAll("[data-accion=pg-ver]").forEach((x) => x.classList.toggle("activa", x === b));
+    caja.querySelectorAll("[data-panel]").forEach((x) => (x.hidden = x.dataset.panel !== b.dataset.ver));
+    caja.querySelector(".pg-nota").textContent = b.dataset.ver === "hoy" ? "Se reinicia cada día a las 12 de la noche." : "Todo lo que has estudiado desde que usas Finlay.";
   } else if (accion === "tema") {
     cambiarTema(b.dataset.tema);
   } else if (accion === "favorito") {
@@ -2092,7 +2239,7 @@ async function router() {
     else if (partes[0] === "examen") await vistaExamenInicio(partes[1]);
     else if (partes[0] === "examen-hacer") {
       const ps = new URLSearchParams(consulta);
-      await vistaExamen(partes[1], Number(ps.get("n")) || 20, ps.get("reloj") === "1");
+      await vistaExamen(partes[1], Number(ps.get("n")) || 20, ps.get("reloj") === "1", ps.get("momento") === "1");
     }
     else if (partes[0] === "planes") await vistaPlanes();
     else if (partes[0] === "plan") await vistaPlan(Number(partes[1]));

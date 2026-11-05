@@ -145,6 +145,8 @@ def manifiesto(version_code, version_name):
         a("versionName", T_STR, version_name),
     ], [
         Elemento("uses-sdk", [a("minSdkVersion", T_DEC, 21), a("targetSdkVersion", T_DEC, 34)]),
+        # Vibrar un poquito al fallar una pregunta (permiso normal: Android no pregunta nada)
+        Elemento("uses-permission", [a("name", T_STR, "android.permission.VIBRATE")]),
         # Desde Android 11 hay que declarar qué servicios externos se usan: aquí, el motor de voz
         Elemento("queries", [], [
             Elemento("intent", [], [Elemento("action", [a("name", T_STR, "android.intent.action.TTS_SERVICE")])]),
