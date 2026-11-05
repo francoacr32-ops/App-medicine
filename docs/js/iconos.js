@@ -41,6 +41,8 @@ const TRAZOS = {
   lupa: '<circle cx="10" cy="10" r="6.5"/><path d="m20 20-5.2-5.2M7.5 10h5M10 7.5v5"/>',
   biblioteca: '<path d="M4 4h4v16H4zM10 4h4v16h-4z"/><path d="m16 5 3.8-1 3 15.5-3.8 1z"/>',
   marcador: '<path d="M6 3h12v18l-6-4.5L6 21z"/>',
+  cuadricula: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/>',
+  ajustes2: '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5h.01"/>',
 };
 

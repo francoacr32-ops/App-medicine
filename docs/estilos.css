@@ -957,3 +957,109 @@ details.menu-fila p { margin: 0 10px 12px 46px; color: var(--suave); font-size: 
 .totales .tarjeta > .ico { width: 24px; height: 24px; color: var(--acento-2); margin-bottom: 4px; }
 .totales .tarjeta > .ico:first-child[class*="ico"] { flex: none; }
 .total-tema .sub { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* =========================================================
+   Diseño 2.0: Biblioteca médica y Evaluaciones
+   ========================================================= */
+/* Cabecera de marca: logo, Finlay y tu foto */
+.barra.marca2 { border-bottom: 0; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; position: static; padding-top: max(12px, env(safe-area-inset-top)); }
+.marca2-logo { display: flex; align-items: center; gap: 10px; flex: 1; text-decoration: none; color: var(--texto); font: 800 1.7rem/1 system-ui, sans-serif; letter-spacing: -.02em; }
+.marca2-logo img { width: 54px; height: auto; padding-right: 10px; border-right: 2px solid color-mix(in srgb, var(--texto) 25%, transparent); }
+.marca2-foto { position: relative; line-height: 0; flex: none; }
+.marca2-avatar { width: 52px; height: 52px; border-radius: 50%; object-fit: cover; border: 3px solid var(--acento-2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--acento-2) 20%, transparent), 0 0 18px color-mix(in srgb, var(--acento-2) 45%, transparent); font-size: 1.4rem; }
+.marca2-foto i { position: absolute; right: 1px; bottom: 2px; width: 12px; height: 12px; border-radius: 50%; background: #22c55e; border: 2px solid var(--fondo); }
+
+/* Portada grande de cada pantalla */
+.hero { position: relative; margin: 0 -16px 14px; padding: 8px 16px 18px; overflow: hidden; }
+.hero-titulo { margin: 0; font: 800 2.4rem/1.02 system-ui, sans-serif; letter-spacing: -.03em; color: var(--texto); position: relative; z-index: 1; }
+.hero-lema { margin: 8px 0 0; color: var(--suave); font-size: 1rem; position: relative; z-index: 1; }
+.hero-biblio { min-height: 168px; display: flex; align-items: center; }
+.hero-arte { position: absolute; right: -10px; top: -14px; height: calc(100% + 20px); width: 58%; object-fit: cover; object-position: center top;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%); mask-image: linear-gradient(90deg, transparent, #000 35%); border-radius: 0 0 0 40px; }
+.hero-biblio .hero-texto { max-width: 58%; }
+.hero-eval { padding-top: 14px; }
+.hero-raya { display: block; width: 140px; height: 5px; margin-top: 14px; border-radius: 999px; background: linear-gradient(90deg, var(--acento-2), transparent); }
+.hero-pulso { position: absolute; right: -10px; top: 6px; width: 62%; opacity: .5; }
+.hero-pulso polyline { fill: none; stroke: #5ad7e6; stroke-width: 2.5; stroke-linejoin: round; }
+
+/* Buscador grande con botón de ajustes */
+.buscador-grande { position: relative; align-items: center; padding: 6px 6px 6px 48px; border-radius: 999px; background: var(--tarjeta); border: 1px solid var(--borde); box-shadow: var(--sombra); }
+.buscador-grande input { border: 0; background: transparent; padding: 10px 6px; box-shadow: none; outline: none; }
+.buscador-lupa { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--texto); line-height: 0; }
+.buscador-lupa .ico { width: 24px; height: 24px; }
+.buscador-ajustes { flex: none; width: 46px; height: 46px; border-radius: 50%; border: 0; border-left: 1px solid var(--borde); background: transparent; color: var(--texto); display: grid; place-items: center; cursor: pointer; }
+.buscador-ajustes .ico { width: 24px; height: 24px; }
+.buscador-ajustes.activo { color: #04262a; background: linear-gradient(90deg, #2ee6dc, #14b8c4); border-left-color: transparent; }
+.biblio-ajustes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: -4px 0 12px; padding: 12px; border-radius: 16px; background: var(--tarjeta); border: 1px solid var(--borde); }
+.biblio-ajustes label { display: flex; flex-direction: column; gap: 4px; font-size: .8rem; color: var(--suave); font-weight: 600; }
+.filtro-activo { margin: -4px 0 10px; font-size: .85rem; color: var(--suave); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.filtro-activo .ico { width: 16px; height: 16px; }
+.filtros-iconos .chip-filtro { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; }
+.filtros-iconos .chip-filtro .ico { width: 20px; height: 20px; }
+.filtros-iconos .chip-filtro.activo { box-shadow: 0 0 0 2px color-mix(in srgb, #2ee6dc 45%, transparent), 0 6px 20px color-mix(in srgb, #14b8c4 45%, transparent); }
+
+/* Tarjetas de la biblioteca: imagen arriba, cuerpo azul profundo */
+.biblio2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+@media (min-width: 600px) { .biblio2 { grid-template-columns: repeat(3, 1fr); } }
+.bcard { display: flex; flex-direction: column; text-decoration: none; color: #eef6ff; border-radius: 20px; overflow: hidden; min-width: 0;
+  background: linear-gradient(170deg, #1f4377, #112a52 70%); border: 1px solid rgba(120, 190, 255, .35);
+  box-shadow: 0 10px 26px rgba(20, 60, 130, .28), inset 0 1px 0 rgba(255,255,255,.12); }
+.bcard-img { position: relative; display: block; aspect-ratio: 16 / 10; background: #0a1730; }
+.bcard-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bcard-img::after { content: ""; position: absolute; inset: auto 0 0; height: 45%; background: linear-gradient(transparent, #1f4377); }
+.bcard-sinimg { display: grid; place-items: center; height: 100%; color: #7fe7e3; }
+.bcard-sinimg .ico { width: 42px; height: 42px; }
+.bcard-tipo { position: absolute; left: 8px; bottom: 6px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px;
+  font-size: .74rem; font-weight: 800; color: #04262a; background: linear-gradient(90deg, #6ff3ea, #2ee6dc); box-shadow: 0 2px 10px rgba(46, 230, 220, .45); }
+.tipo-conferencia .bcard-tipo { background: linear-gradient(90deg, #e3dcff, #c9bcff); color: #251a5c; box-shadow: 0 2px 10px rgba(160, 140, 255, .45); }
+.tipo-libro .bcard-tipo { background: linear-gradient(90deg, #ffe7b5, #ffd27a); color: #4a3200; }
+.bcard-tipo .ico { width: 14px; height: 14px; }
+.bcard-fav { position: absolute; top: 8px; right: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,.45); color: #ff5c8a; }
+.bcard-fav .ico { width: 16px; height: 16px; fill: currentColor; }
+.bcard-cuerpo { position: relative; display: flex; flex-direction: column; gap: 8px; padding: 6px 12px 12px; flex: 1; }
+.bcard-flecha { position: absolute; right: 8px; top: -18px; z-index: 2; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(10, 30, 60, .7); border: 1px solid rgba(255,255,255,.35); color: #fff; }
+.bcard-flecha .ico { width: 18px; height: 18px; }
+.bcard-titulo { font-size: 1.02rem; line-height: 1.22; padding-right: 22px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.bcard-asig { display: flex; align-items: center; gap: 6px; font-size: .8rem; color: #b9d4f5; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.14); margin-top: auto; min-width: 0; }
+.bcard-asig span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bcard-asig .ico { width: 18px; height: 18px; color: #7fe7e3; flex: none; }
+.bcard-datos { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .75rem; color: #dbe9ff; }
+.bcard-datos span { display: inline-flex; align-items: center; gap: 4px; }
+.bcard-datos .ico { width: 15px; height: 15px; color: #9fd8ff; }
+
+/* Banner "Tu progreso académico" */
+.banner-progreso { position: relative; display: flex; align-items: center; margin: 18px 0 6px; min-height: 120px; padding: 16px; border-radius: 22px; overflow: hidden; text-decoration: none; color: #fff;
+  background: linear-gradient(110deg, #071a3a 30%, #0c3270); border: 1px solid rgba(90, 215, 230, .45); box-shadow: 0 10px 30px rgba(10, 40, 100, .35); }
+.banner-progreso img { position: absolute; right: -10px; top: 0; height: 100%; width: 58%; object-fit: cover; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); }
+.banner-texto { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 4px; max-width: 70%; }
+.banner-texto b { display: flex; align-items: center; gap: 8px; font-size: 1.08rem; }
+.banner-texto b .ico { width: 26px; height: 26px; color: #5ef2ea; }
+.banner-texto > span:not(.banner-boton) { font-size: .8rem; color: #b9d4f5; }
+.banner-boton { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 7px 16px; border-radius: 999px; font-size: .82rem; font-weight: 800;
+  color: #04262a; background: linear-gradient(90deg, #6ff3ea, #2ee6dc); box-shadow: 0 4px 14px rgba(46, 230, 220, .45); }
+.banner-boton .ico { width: 16px; height: 16px; }
+
+/* Evaluaciones: tarjetas con ícono 3D y borde de color */
+.eval-tarjeta, .nota-tarjeta { display: flex; align-items: center; gap: 14px; padding: 14px 14px 14px 12px; margin-bottom: 14px; border-radius: 22px; text-decoration: none; color: var(--texto);
+  background: var(--tarjeta); border: 1px solid var(--borde); border-left: 4px solid var(--c, var(--acento-2)); box-shadow: var(--sombra); }
+.eval-ico { width: 78px; height: 78px; object-fit: contain; flex: none; padding-right: 14px; border-right: 1px solid var(--borde); box-sizing: content-box; }
+.eval-texto { flex: 1; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.eval-texto > b { font-size: 1.15rem; line-height: 1.2; display: flex; align-items: center; gap: 8px; }
+.eval-texto > span { color: var(--suave); font-size: .9rem; }
+.pildora-enlace { display: inline-flex; align-items: center; gap: 2px; padding: 6px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; text-decoration: none; color: var(--acento);
+  background: color-mix(in srgb, var(--acento-2) 16%, var(--tarjeta)); }
+.pildora-enlace .ico { width: 16px; height: 16px; }
+.nota-tarjeta { --c: #94a3b8; }
+.nota-tarjeta.n2 { --c: #e11d48; background: linear-gradient(110deg, var(--tarjeta) 55%, color-mix(in srgb, #e11d48 10%, var(--tarjeta))); }
+.nota-tarjeta.n3 { --c: #f2962e; background: linear-gradient(110deg, var(--tarjeta) 55%, color-mix(in srgb, #f2962e 10%, var(--tarjeta))); }
+.nota-tarjeta.n4 { --c: #2f7ff0; background: linear-gradient(110deg, var(--tarjeta) 55%, color-mix(in srgb, #2f7ff0 10%, var(--tarjeta))); }
+.nota-tarjeta.n5 { --c: #16a34a; background: linear-gradient(110deg, var(--tarjeta) 55%, color-mix(in srgb, #16a34a 10%, var(--tarjeta))); }
+.nota-insignia { flex: none; display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #fff; font-weight: 800; background: var(--c); }
+.nota-tarjeta .nota-insignia { background: var(--c); }
+.nota-meta { display: flex; flex-wrap: wrap; gap: 4px 0; font-size: .82rem; color: var(--suave); }
+.nota-meta span { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-left: 1px solid var(--borde); }
+.nota-meta span:first-child { padding-left: 0; border-left: 0; }
+.nota-meta .ico { width: 16px; height: 16px; }
+@media (max-width: 360px) { .eval-ico { width: 60px; height: 60px; padding-right: 10px; } .hero-titulo { font-size: 2rem; } }
