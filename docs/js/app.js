@@ -10,7 +10,9 @@ import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esI
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
-import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, puntosYNivel, textoPuntos } from "./inicio.js";
+import { activarZoom } from "./zoom.js";
+import { pref, guardarPref, htmlMiniatura, imagenAsignatura, descripcionAsignatura, htmlAnillo, htmlAnilloPct, htmlSemana, insignias, iniciarContadorDeTiempo, tiempoDeEstudio, textoTiempo, favoritos, esFavorito, alternarFavorito, textoPuntos } from "./inicio.js";
+import * as juego from "./logros.js";
 import { metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -109,9 +111,11 @@ async function cargarImagenes(raiz) {
 
 // Ver una imagen en grande (con zoom de dos dedos del navegador)
 const $lupa = document.getElementById("lupa");
+const zoomLupa = activarZoom($lupa.querySelector(".lupa-caja"), $lupa.querySelector("img"));
 function ampliar(src) {
   $lupa.querySelector("img").src = src;
   $lupa.hidden = false;
+  zoomLupa.reiniciar();
   history.pushState({ lupa: true }, "");
 }
 function cerrarLupa(desdeHistorial = false) {
@@ -143,6 +147,49 @@ function htmlAvatar(clase, conInicial = false) {
   return `<img class="${clase}" src="iconos/retrato-finlay.webp" alt="Carlos J. Finlay">`;
 }
 
+/** Datos que necesitan los logros y trofeos */
+async function contextoLogros() {
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
+  const respuestas = await db.todasLasRespuestas();
+  const porDoc = new Map();
+  for (const r of respuestas) porDoc.set(r.docId, (porDoc.get(r.docId) || 0) + 1);
+  const completo = (d) => (porDoc.get(d.id) || 0) >= d.cuestionario.length;
+  const diario = await db.listarDiario();
+  const { racha } = calcularRacha(diario);
+  const asigs = await db.listarAsignaturas();
+  let completas = 0;
+  let mejor = null;
+  const anios = ANIOS.map(() => ({ total: 0, completas: 0 }));
+  for (const a of asigs) {
+    const suyos = docs.filter((d) => d.asignaturas.includes(a.id));
+    const hechos = suyos.filter(completo).length;
+    const lista = suyos.length > 0 && hechos === suyos.length;
+    if (lista) completas++;
+    else if (suyos.length && (!mejor || suyos.length - hechos < mejor.n)) mejor = { n: suyos.length - hechos, a };
+    if (anios[a.anio - 1]) {
+      anios[a.anio - 1].total++;
+      if (lista) anios[a.anio - 1].completas++;
+    }
+  }
+  const e = juego.estado();
+  return {
+    pruebas: e.pruebas, perfectas: e.perfectas, leidas: e.leidas.length, noche: e.noche, madrugada: e.madrugada, examen5: e.examen5,
+    racha, correctas: diario.reduce((s, d) => s + d.correctas, 0), anios,
+    asig: { completas, mejor: mejor ? `Te faltan ${mejor.n} cuestionario${mejor.n > 1 ? "s" : ""} en ${mejor.a.nombre}` : "" },
+  };
+}
+async function revisarLogros(avisar = true) {
+  try { return juego.revisar(await contextoLogros(), avisar); } catch (e) { console.error(e); return []; }
+}
+/** Al terminar una prueba completa: bonos, logros y pantalla de celebración */
+async function terminarPrueba({ titulo, acertadas, total, pct, nota: n, puntosInicio, otraVez }) {
+  juego.pruebaTerminada(acertadas, total);
+  const nuevos = await revisarLogros(false);
+  juego.celebrar({ titulo, acertadas, total, pct, nota: n, puntosGanados: juego.estado().puntos - puntosInicio, nuevos, otraVez });
+  celebrado = true;
+}
+let celebrado = false;
+
 /** Datos del progreso de todo lo estudiado (se usan en Inicio, Progreso y Perfil) */
 async function resumenDeEstudio() {
   const docs = await db.listarDocumentos();
@@ -161,7 +208,8 @@ async function resumenDeEstudio() {
   return {
     docs, conPreguntas, respuestas, diario, racha, hoy, examenes, temasDominados, correctas, respondidas,
     pct: totalPreguntas ? Math.round((dominadas / totalPreguntas) * 100) : 0,
-    nivel: puntosYNivel({ correctas, temasDominados, examenes: examenes.length, racha }),
+    nivel: juego.nivelDe(juego.estado().puntos),
+    puntos: juego.estado().puntos,
   };
 }
 
@@ -243,8 +291,10 @@ async function vistaInicio() {
   poner(null, `
     ${pedirNombre}
     <section class="saludo2">
-      <h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""} <span class="mano">👋</span></h2>
-      <p class="animo">${r.hoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p>
+      <div><h2 class="hola">Hola${nombre ? ", " + esc(nombre) : ""} <span class="mano">👋</span></h2>
+      <p class="animo">${r.hoy.preguntas >= meta ? "¡Meta de hoy cumplida! 🎉" : "Sigue avanzando hacia tu meta"}</p></div>
+      <a class="racha-fuego ${r.racha ? "" : "apagado"}" href="#/progreso/logros" style="--tam:${(1 + Math.min(r.racha, 30) / 30).toFixed(2)}"
+        title="${r.racha} días seguidos"><span class="fuego">🔥</span><b>${r.racha}</b><span>día${r.racha === 1 ? "" : "s"}</span></a>
     </section>
     <a class="tarjeta progreso-general" href="#/progreso">
       <span class="pg-titulo">Tu progreso general</span>
@@ -315,13 +365,31 @@ async function vistaProgresoGeneral(pestana = "estadisticas") {
     <a href="#/progreso" class="${pestana === "estadisticas" ? "activa" : ""}">Estadísticas</a>
     <a href="#/progreso/logros" class="${pestana === "logros" ? "activa" : ""}">Logros</a></nav>`;
   if (pestana === "logros") {
+    const { logros, trofeos } = juego.listaDeLogros(await contextoLogros());
+    const nv = r.nivel;
+    const tarjetaLogro = (l) => `<div class="logro ${l.ok ? "ganado" : ""} medalla-${l.medalla}">
+        <span class="logro-medalla">${l.emoji}</span>
+        <span class="logro-texto"><b>${esc(l.nombre)}</b><span class="sub">${esc(l.que)}</span>
+          ${l.ok ? `<span class="logro-ok">${l.medalla === "trofeo" ? "Trofeo ganado" : "Medalla de " + l.medalla}${l.fecha ? " · " + new Date(l.fecha).toLocaleDateString("es") : ""}</span>`
+            : `<span class="logro-falta">${esc(l.faltaTexto)}</span>
+               ${l.meta > 1 ? `<span class="logro-barra"><span style="width:${Math.round((l.actual / l.meta) * 100)}%"></span></span>` : ""}`}</span></div>`;
     return poner("Mi progreso", `${pestanas}
-      <div class="tarjeta nivel-grande">${ico("trofeo")}<span><b>Nivel ${r.nivel.nivel}</b> · ${esc(r.nivel.nombreNivel)}
-        <span class="sub">${r.nivel.puntos} puntos${r.nivel.faltan ? ` · te faltan ${r.nivel.faltan} para el siguiente nivel` : ""}</span></span></div>
-      <h2>Insignias · ${lista.filter((x) => x.ok).length} de ${lista.length}</h2>
-      <div class="insignias">${lista.map((x) => `<div class="insignia ${x.ok ? "ganada" : ""}" title="${esc(x.d)}">
-        <span class="insignia-emoji">${x.e}</span><b>${esc(x.t)}</b><span class="sub">${esc(x.d)}</span></div>`).join("")}</div>
-      <p class="nota centro">Ganas puntos al acertar preguntas (10), dominar un tema (50), hacer exámenes (20) y estudiar días seguidos (5).</p>`, "#/perfil");
+      <section class="tarjeta nivel-tarjeta">
+        <span class="nivel-emoji">${nv.emoji}</span>
+        <span class="nivel-info"><span class="sub">Nivel ${nv.n} de 6</span><b>${esc(nv.nombre)}</b>
+          <span class="nivel-barra"><span style="width:${nv.pct}%"></span></span>
+          <span class="sub">${r.puntos} puntos · ${nv.siguiente ? `${nv.faltan} para ${esc(nv.siguiente.nombre)}` : "¡Nivel máximo!"}</span></span>
+      </section>
+      <div class="niveles-camino">${juego.NIVELES.map((x) => `<span class="${x.n <= nv.n ? "hecho" : ""}" title="${esc(x.nombre)} (${x.desde} puntos)">${x.emoji}</span>`).join("")}</div>
+      <h2>Medallas · ${logros.filter((x) => x.ok).length} de ${logros.length}</h2>
+      <div class="logros">${[...logros].sort((x, y) => y.ok - x.ok).map(tarjetaLogro).join("")}</div>
+      <h2>Trofeos especiales · ${trofeos.filter((x) => x.ok).length} de ${trofeos.length}</h2>
+      <div class="logros">${trofeos.map(tarjetaLogro).join("")}</div>
+      <details class="tarjeta como-puntos"><summary><b>¿Cómo gano puntos?</b></summary>
+        <ul><li>✅ Respuesta correcta: <b>+${juego.PUNTOS.correcta}</b></li>
+          <li>🏁 Terminar una prueba completa: <b>+${juego.PUNTOS.terminar}</b></li>
+          <li>💯 Sacar 100 % en la prueba: <b>+${juego.PUNTOS.perfecta}</b> más</li>
+          <li>🔥 Racha: cada día, <b>+${juego.PUNTOS.rachaPorDia}</b> por cada día seguido (hasta ${juego.PUNTOS.rachaMax})</li></ul></details>`, "#/perfil");
   }
   // Áreas más fuertes: porcentaje dominado de cada asignatura
   const asigs = (await db.listarAsignaturas()).filter((a) => r.conPreguntas.some((d) => d.asignaturas.includes(a.id)));
@@ -399,11 +467,13 @@ async function vistaPerfil() {
         <span class="avatar-lapiz">${ico("lapiz")}</span>
         <input type="file" id="aj-foto" accept="image/*" hidden></label>
       <b class="perfil-nombre">${esc(nombre || "Estudiante")}</b>
-      <span class="sub">Estudiante de Medicina</span>
+      <span class="sub">${r.nivel.emoji} ${esc(r.nivel.nombre)}</span>
+      <span class="perfil-nivel"><span class="nivel-barra"><span style="width:${r.nivel.pct}%"></span></span>
+        <span class="sub">${r.nivel.siguiente ? `${r.nivel.faltan} puntos para ${esc(r.nivel.siguiente.nombre)}` : "¡Nivel máximo!"}</span></span>
     </section>
     <div class="perfil-cifras">
-      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">⭐</span><span><b>Nivel ${r.nivel.nivel}</b><span class="sub">${esc(r.nivel.nombreNivel)}</span></span></a>
-      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">💎</span><span><b>${textoPuntos(r.nivel.puntos)}</b><span class="sub">Puntos</span></span></a>
+      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">${r.nivel.emoji}</span><span><b>Nivel ${r.nivel.n}</b><span class="sub">${esc(r.nivel.nombre)}</span></span></a>
+      <a class="tarjeta" href="#/progreso/logros"><span class="emoji">💎</span><span><b>${textoPuntos(r.puntos)}</b><span class="sub">Puntos</span></span></a>
     </div>
     <nav class="tarjeta menu-lista">
       ${fila("#/progreso", "grafica", "Mi progreso")}
@@ -458,7 +528,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 1.8.1 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 1.9 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -854,12 +924,16 @@ function actualizarAvance() {
     if (f.getBoundingClientRect().top <= tope) actual = Number(f.id.slice(1)) || actual;
     else break;
   }
+  // Al llegar al final de la página cuenta como la última diapositiva
+  if (innerHeight + scrollY >= document.documentElement.scrollHeight - 40 && document.querySelector(`#d${total} img[src]`)) actual = total;
   document.getElementById("avance-num").textContent = `${actual} / ${total}`;
   document.getElementById("avance-barra").style.width = `${((actual / total) * 100).toFixed(1)}%`;
   clearTimeout(esperaAvance);
-  esperaAvance = setTimeout(() => guardarPref("pos-" + caja.dataset.doc, actual > 1 ? String(actual) : ""), 400);
+  esperaAvance = setTimeout(() => guardarPref("pos-" + caja.dataset.doc, actual > 1 && actual < total ? String(actual) : ""), 400);
+  if (actual === total && total > 1 && juego.conferenciaLeida(caja.dataset.doc)) revisarLogros();
 }
 addEventListener("scroll", () => requestAnimationFrame(actualizarAvance), { passive: true });
+$app.addEventListener("load", (e) => e.target.matches?.("img[data-diapo]") && requestAnimationFrame(actualizarAvance), true);
 
 // ---------- Motor de preguntas (sirve para el cuestionario, el repaso y el examen) ----------
 let enPantalla = []; // posición en pantalla → { doc, i }
@@ -994,7 +1068,10 @@ async function responder(k, valor) {
   if (p.tipo !== "abierta") mostrarCorreccion(k, r);
   else if (!r.correcta) tarjeta.querySelector(".explicacion .acciones")?.insertAdjacentHTML("afterbegin", botonGuia(k));
   await db.guardarRespuesta(doc.id, i, r.correcta);
-  alResponder(k, r);
+  juego.respuesta(r.correcta, calcularRacha(await db.listarDiario()).racha, db.hoy());
+  celebrado = false;
+  await alResponder(k, r);
+  if (!celebrado) revisarLogros();
 }
 
 function verRespuesta(k) {
@@ -1106,10 +1183,16 @@ async function htmlCuestionario(doc) {
   const chips = [["todas", "Todas"], ...Object.entries(NOMBRE_TIPO).filter(([k]) => tipos.has(k)), ["falladas", "❗ Las que fallé"]]
     .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
     .join("");
+  const puntosInicio = juego.estado().puntos;
+  let antes = resp.size;
   alResponder = async () => {
     const r = await db.respuestasDe(doc.id);
+    const bienAhora = r.filter((x) => x.ultima).length;
     document.getElementById("marcador").textContent =
-      `Respondidas ${r.length} de ${doc.cuestionario.length} · Correctas ${r.filter((x) => x.ultima).length}`;
+      `Respondidas ${r.length} de ${doc.cuestionario.length} · Correctas ${bienAhora}`;
+    if (r.length >= doc.cuestionario.length && antes < doc.cuestionario.length)
+      await terminarPrueba({ titulo: doc.nombre, acertadas: bienAhora, total: doc.cuestionario.length, puntosInicio });
+    antes = r.length;
   };
   const bien = [...resp.values()].filter((r) => r.ultima).length;
   return `<p class="marcador" id="marcador">Respondidas ${resp.size} de ${doc.cuestionario.length} · Correctas ${bien}</p>
@@ -1137,6 +1220,7 @@ async function vistaRepaso() {
   }
   let hechas = 0;
   let bien = 0;
+  const puntosInicio = juego.estado().puntos;
   alResponder = async (k, r) => {
     hechas++;
     if (r.correcta) bien++;
@@ -1150,6 +1234,7 @@ async function vistaRepaso() {
         <a class="btn" href="#/">Volver al inicio</a></div>`;
       $app.querySelector("[data-accion=ses-sig]")?.setAttribute("hidden", "");
       document.getElementById("fin").scrollIntoView({ behavior: "smooth" });
+      await terminarPrueba({ titulo: "Repaso del día", acertadas: bien, total: lista.length, puntosInicio });
     }
   };
   poner(
@@ -1204,6 +1289,7 @@ async function vistaExamenInicio(ambitoInicial) {
 let relojExamen = null;
 
 async function vistaExamen(ambito, cantidad, conReloj) {
+  vistaExamen.puntosInicio = juego.estado().puntos;
   const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length);
   const lista = preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
@@ -1292,6 +1378,8 @@ async function entregarExamen() {
   const { titulo, ambito, lista } = vistaExamen.datos;
   const porcentaje = Math.round((puntos / lista.length) * 100);
   const n = nota(porcentaje);
+  const bienExamen = enPantalla.filter((_, k) => document.querySelector(`#p${k} .explicacion.es-correcta`)).length;
+  juego.respuestasDeExamen(bienExamen, n.nota);
   await db.guardarExamen({ fecha: Date.now(), titulo, ambito, cantidad: lista.length, porcentaje, nota: n.nota });
   document.querySelector("[data-accion=entregar]")?.remove();
   document.getElementById("reloj").textContent = `Nota: ${n.nota}`;
@@ -1307,6 +1395,8 @@ async function entregarExamen() {
       <a class="btn" href="#/examen/${encodeURIComponent(ambito)}">Hacer otro examen</a>
     </div>`;
   window.scrollTo({ top: 0, behavior: "smooth" });
+  await terminarPrueba({ titulo, acertadas: bienExamen, total: lista.length, pct: porcentaje, nota: n.nota,
+    puntosInicio: vistaExamen.puntosInicio, otraVez: `#/examen/${encodeURIComponent(ambito)}` });
 }
 
 // ---------- Pantalla: plan para el examen ----------
@@ -1584,25 +1674,22 @@ async function vistaBiblioteca(filtro = "todo") {
     ${docs.length ? `<div class="biblio">${docs.map((d) => {
       const [anio, nombreA] = d.asignaturas[0].split("|");
       const portada = imagenAsignatura(nombreA, anio);
-      return `<a class="biblio-tarjeta" href="#/doc/${d.id}">
-        <span class="biblio-portada">${tieneVisual(d)
-          ? `<img data-portada="${d.id}" alt="" ${portada ? `src="${portada}"` : ""}>`
-          : portada ? `<img src="${portada}" alt="">` : `<span class="biblio-icono">${ico(d.tipo === "libro" ? "libro" : "conferencia")}</span>`}
+      const color = (ESTILO_ANIO[Number(anio) - 1] || ESTILO_ANIO[0])[1];
+      const tipo = d.tipo === "libro" ? "Libro" : d.tipo === "taller" ? "Clase taller" : "Conferencia";
+      const total = totalPaginas(d);
+      const unidad = d.diapositivas || d.etiqueta === "diap." ? "diapositivas" : "páginas";
+      return `<a class="biblio-tarjeta" href="#/doc/${d.id}" style="--c:${color}">
+        <span class="biblio-arriba">
+          ${portada ? `<img src="${portada}" alt="">` : `<span class="biblio-icono">${ico(d.tipo === "libro" ? "libro" : "conferencia")}</span>`}
+          <span class="biblio-tipo">${ico(d.tipo === "libro" ? "libro" : d.tipo === "taller" ? "taller" : "conferencia")}${tipo}</span>
           ${favs.includes(d.id) ? `<span class="biblio-fav">${ico("corazon")}</span>` : ""}
-          ${d.cuestionario?.length ? `<span class="biblio-preg">${d.cuestionario.length} ❓</span>` : ""}</span>
-        <b>${esc(d.nombre)}</b><span class="sub">${esc(nombreA)}</span></a>`;
+        </span>
+        <b class="biblio-titulo">${esc(d.nombre)}</b>
+        <span class="biblio-asig">${esc(nombreA)}</span>
+        <span class="biblio-datos">${total ? `<span>${ico("conferencia")}${total} ${unidad}</span>` : ""}
+          ${d.cuestionario?.length ? `<span>${ico("examen")}${d.cuestionario.length} preguntas</span>` : ""}</span></a>`;
     }).join("")}</div>`
     : `<p class="vacio">${filtro === "favoritos" ? "Todavía no tienes favoritos. Abre una conferencia y toca ❤ para guardarla aquí." : "No hay materiales de este tipo todavía."}</p>`}`);
-  // Portadas: la primera diapositiva de cada material, cuando aparece en pantalla
-  const imgs = [...$app.querySelectorAll("img[data-portada]")];
-  const poner1 = async (img) => {
-    const d = todos.find((x) => x.id === img.dataset.portada);
-    const u = d && (await urlPagina(d, 1, 480));
-    if (u) img.src = u;
-  };
-  if (!("IntersectionObserver" in window)) return imgs.forEach(poner1);
-  const obs = new IntersectionObserver((es) => es.forEach((e) => e.isIntersecting && (obs.unobserve(e.target), poner1(e.target))), { rootMargin: "300px" });
-  imgs.forEach((i) => obs.observe(i));
 }
 
 function vistaAyuda() {
@@ -1975,6 +2062,7 @@ async function router() {
   const partes = ruta.split("/").filter(Boolean).map(decodeURIComponent);
   const q = new URLSearchParams(consulta).get("q") || "";
   cerrarMenu();
+  document.querySelectorAll(".celebracion").forEach((c) => c.remove()); // al cambiar de pantalla se cierra
   sesion = null;
   liberarDiapositivas();
   pintarNav(partes[0] || "");
@@ -2012,6 +2100,12 @@ async function router() {
 }
 
 iniciarContadorDeTiempo(db.hoy);
+(async () => {
+  if (juego.estado().sembrado) return;
+  const diario = await db.listarDiario();
+  juego.sembrar(diario.reduce((s, d) => s + d.correctas, 0));
+  revisarLogros(false); // los logros de antes se guardan sin llenar la pantalla de avisos
+})();
 window.addEventListener("hashchange", router);
 router().then(cargarPaquetesIncluidos);
 
