@@ -1303,3 +1303,64 @@ main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .res-mas { display: block; padding: 8px 12px 10px; font-size: .82rem; font-weight: 700; border-top: 1px solid var(--borde); }
 .filtros .chip-filtro small { opacity: .7; margin-left: 2px; }
 button.chip-filtro { font: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; }
+
+/* =========================================================
+   Clases propias y resúmenes de asignatura
+   ========================================================= */
+.leccion { font-size: 1rem; line-height: 1.6; }
+.leccion p { margin: 8px 0; }
+.lc-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
+.lc-sello { padding: 4px 12px; border-radius: 999px; font-size: .78rem; font-weight: 800; color: #04262a; background: linear-gradient(90deg, #6ff3ea, #2ee6dc); }
+.lc-motivacion, .lc-objetivos, .lc-previos, .lc-indice, .lc-estudio, .lc-biblio { margin: 10px 0; padding: 12px 14px; border-radius: 16px; background: var(--tarjeta); border: 1px solid var(--borde); }
+.lc-motivacion { background: linear-gradient(140deg, color-mix(in srgb, #2f7ff0 12%, var(--tarjeta)), var(--tarjeta)); border-left: 4px solid #2f7ff0; }
+.lc-pregunta-gancho { font-weight: 700; font-style: italic; color: var(--acento); }
+.lc-objetivos { border-left: 4px solid #22c55e; }
+.lc-previos { border-left: 4px solid var(--naranja); }
+.lc-objetivos ul, .lc-previos ul, .lc-estudio ol, .lc-biblio ul, .lc-indice ol { margin: 6px 0 0; padding-left: 20px; }
+.lc-indice a { text-decoration: none; font-weight: 600; }
+.lc-seccion { margin: 18px 0; }
+.lc-seccion h2 { display: flex; align-items: center; gap: 10px; color: var(--texto); font-size: 1.15rem; margin: 0 0 8px; padding: 0; scroll-margin-top: 80px; }
+.lc-seccion h2::before { display: none; }
+.lc-num { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-size: .9rem; color: #fff; background: linear-gradient(135deg, #14b8c4, #2f7ff0); }
+.lc-lista { padding-left: 20px; margin: 6px 0; }
+.lc-lista li { margin: 3px 0; }
+.lc-clave, .lc-mnemo, .lc-caso { margin: 12px 0; padding: 10px 14px; border-radius: 14px; }
+.lc-clave { background: color-mix(in srgb, #facc15 18%, var(--tarjeta)); border-left: 4px solid #e0a500; }
+.lc-mnemo { background: color-mix(in srgb, #9b4fe0 12%, var(--tarjeta)); border-left: 4px solid #9b4fe0; }
+.lc-caso { background: color-mix(in srgb, #2f7ff0 10%, var(--tarjeta)); border-left: 4px solid #2f7ff0; }
+.lc-caso-preg { font-weight: 700; }
+.lc-clave p, .lc-mnemo p, .lc-caso p { margin: 4px 0; }
+.lc-caso details summary, .lc-pausa summary { cursor: pointer; font-weight: 700; color: var(--acento); }
+.lc-pausa { margin: 12px 0; padding: 10px 14px; border-radius: 14px; background: color-mix(in srgb, #22c55e 10%, var(--tarjeta)); border: 1px dashed color-mix(in srgb, #22c55e 55%, transparent); }
+.lc-pausa summary { display: flex; flex-direction: column; gap: 2px; list-style: none; color: var(--texto); }
+.lc-pausa summary::-webkit-details-marker { display: none; }
+.lc-pausa summary b { color: #16a34a; font-size: .85rem; }
+.lc-pausa[open] summary::after { content: "Respuesta:"; font-size: .8rem; color: var(--suave); margin-top: 6px; }
+.lc-tabla-caja { margin: 12px 0; overflow-x: auto; }
+.lc-tabla-titulo { font-weight: 800; margin: 0 0 6px; font-size: .92rem; }
+.lc-tabla { width: 100%; border-collapse: collapse; font-size: .86rem; background: var(--tarjeta); border-radius: 12px; overflow: hidden; }
+.lc-tabla th { background: linear-gradient(135deg, #0f8f99, #0b6a74); color: #fff; text-align: left; padding: 8px; }
+.lc-tabla td { padding: 8px; border-top: 1px solid var(--borde); vertical-align: top; }
+.lc-tabla tr:nth-child(even) td { background: color-mix(in srgb, var(--acento-2) 5%, var(--tarjeta)); }
+.lc-pasos ol { list-style: none; counter-reset: paso; padding: 0; margin: 6px 0; display: grid; gap: 0; }
+.lc-pasos li { counter-increment: paso; position: relative; padding: 8px 10px 8px 46px; margin-bottom: 18px; border-radius: 12px; background: var(--tarjeta); border: 1px solid var(--borde); }
+.lc-pasos li::before { content: counter(paso); position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: .8rem; color: #fff; background: #14b8c4; }
+.lc-pasos li:not(:last-child)::after { content: "↓"; position: absolute; left: 50%; bottom: -18px; transform: translateX(-50%); color: var(--acento-2); font-weight: 800; }
+.lc-fuente { font-size: .78rem; color: var(--suave); }
+.lc-ideas { padding-left: 22px; }
+.lc-ideas li { margin: 4px 0; }
+.lc-al-cuestionario { margin: 18px 0 8px; }
+.lc-intro { font-size: 1.02rem; }
+/* Mapa conceptual (árbol con líneas) */
+.mapa-conceptual { margin: 14px 0; padding: 12px 6px; border-radius: 16px; background: var(--tarjeta); border: 1px solid var(--borde); }
+.mapa-conceptual figcaption { font-weight: 800; font-size: .92rem; padding: 0 8px 8px; }
+.mc-arbol ul { list-style: none; margin: 0; padding-left: 18px; position: relative; }
+.mc-arbol > ul { padding-left: 0; }
+.mc-arbol li { position: relative; padding: 4px 0 4px 14px; }
+.mc-arbol > ul > li { padding-left: 0; }
+.mc-arbol li li::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; border-left: 2px solid color-mix(in srgb, var(--acento-2) 50%, transparent); }
+.mc-arbol li li:last-child::before { bottom: auto; height: 18px; }
+.mc-arbol li li::after { content: ""; position: absolute; left: 0; top: 18px; width: 12px; border-top: 2px solid color-mix(in srgb, var(--acento-2) 50%, transparent); }
+.mc-nodo { display: inline-block; padding: 5px 10px; border-radius: 10px; font-size: .86rem; line-height: 1.35; background: color-mix(in srgb, var(--acento-2) 12%, var(--tarjeta)); border: 1px solid color-mix(in srgb, var(--acento-2) 40%, transparent); }
+.mc-raiz { font-weight: 800; color: #fff; background: linear-gradient(135deg, #0f8f99, #2f7ff0); border: 0; font-size: .95rem; }
+.mc-arbol > ul > li > ul > li > .mc-nodo { font-weight: 700; background: color-mix(in srgb, #2f7ff0 14%, var(--tarjeta)); border-color: color-mix(in srgb, #2f7ff0 40%, transparent); }

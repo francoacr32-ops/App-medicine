@@ -110,6 +110,13 @@ export async function importarPaquete(datos, progreso = () => {}) {
     }
   }
 
+  // Resúmenes de asignatura (mapa conceptual, cuadros y lo esencial de cada tema)
+  for (const r of datos.resumenesAsignatura || []) {
+    const asig = await db.crearAsignatura(Number(r.anio), String(r.asignatura).trim());
+    await db.guardarResumenAsignatura(asig.id, r);
+    resultado.resumenesAsig = (resultado.resumenesAsig || 0) + 1;
+  }
+
   for (const [i, m] of datos.materiales.entries()) {
     progreso(`Guardando ${i + 1} de ${datos.materiales.length}:\n${m.nombre}`);
     const asig = await db.crearAsignatura(Number(m.anio), String(m.asignatura).trim().replace(/\|/g, "-"), semestre(m.semestre));
@@ -120,6 +127,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
     if (doc) {
       if (!doc.asignaturas.includes(asig.id)) doc.asignaturas.push(asig.id);
       if (m.resumen) doc.resumen = m.resumen;
+      if (m.leccion) doc.leccion = m.leccion;
       if (m.cuestionario) {
         // Si cambian las preguntas, el progreso anterior ya no corresponde
         if (JSON.stringify(doc.cuestionario) !== JSON.stringify(m.cuestionario)) await db.borrarRespuestas(doc.id);
@@ -149,6 +157,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
         fecha: Date.now(),
         resumen: m.resumen || null,
         cuestionario: m.cuestionario || null,
+        leccion: m.leccion || null,
         origen: "paquete",
       };
       await db.guardarDocumento(doc, fragmentos);

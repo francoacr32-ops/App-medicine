@@ -77,6 +77,13 @@ export async function listarAsignaturas(anio) {
   return filtradas.sort((a, b) => a.anio - b.anio || a.nombre.localeCompare(b.nombre, "es"));
 }
 
+export async function guardarResumenAsignatura(id, resumen) {
+  const a = await obtenerAsignatura(id);
+  if (!a) return;
+  a.resumen = resumen;
+  await promesa((await almacen("asignaturas", "readwrite")).put(a));
+}
+
 export async function obtenerAsignatura(id) {
   return promesa((await almacen("asignaturas")).get(id));
 }

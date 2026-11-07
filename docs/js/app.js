@@ -17,6 +17,7 @@ import * as tiempo from "./tiempo.js";
 import * as organizar from "./organizar.js";
 import * as tarjetas from "./tarjetas.js";
 import * as notas from "./notas.js";
+import { htmlLeccion, htmlResumen } from "./leccion.js";
 import { barajar, metaDiaria, guardarMeta, calcularRacha, preguntasDelRepaso, preguntasDeExamen, nota, diasHasta, repartirPlan, crearPaquete } from "./estudio.js";
 
 const ANIOS = ["1er año", "2do año", "3er año", "4to año", "5to año", "6to año"];
@@ -973,6 +974,15 @@ async function vistaAsignatura(id, pestana = "conferencias") {
   if (!asig) return (location.hash = "#/");
   const docs = (await db.documentosDeAsignatura(id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
   if (pestana === "progreso") return vistaProgreso(asig, docs);
+  if (pestana === "resumen" && asig.resumen) {
+    return poner(asig.nombre, `<p class="migas">${esc(ANIOS[asig.anio - 1])}</p>
+      <nav class="pestanas">
+        <a href="${enlaceAsig(id)}/conferencias">Conferencias</a>
+        <a href="${enlaceAsig(id)}/libros">Libros</a>
+        <a href="${enlaceAsig(id)}/resumen" class="activa">Resumen</a>
+        <a href="${enlaceAsig(id)}/progreso">Progreso</a>
+      </nav>${htmlResumen(asig.resumen)}`, `#/anio/${asig.anio}`);
+  }
   const tipo = pestana === "libros" ? "libro" : "conferencia";
   const lista = docs.filter((d) => (tipo === "libro" ? esLibro(d) : !esLibro(d)));
 
@@ -1004,6 +1014,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
      <nav class="pestanas">
        <a href="${enlaceAsig(id)}/conferencias" class="${tipo === "conferencia" ? "activa" : ""}">Conferencias</a>
        <a href="${enlaceAsig(id)}/libros" class="${tipo === "libro" ? "activa" : ""}">Libros</a>
+       ${asig.resumen ? `<a href="${enlaceAsig(id)}/resumen">Resumen</a>` : ""}
        <a href="${enlaceAsig(id)}/progreso">Progreso</a>
      </nav>
      <ul class="docs">${items || `<li class="vacio">No hay ${tipo === "libro" ? "libros" : "conferencias"} todavía.</li>`}</ul>
@@ -1159,18 +1170,24 @@ async function vistaDoc(docId, pestana, irA = 0) {
   const doc = await db.obtenerDocumento(docId);
   if (!doc) return (location.hash = "#/");
   guardarPref("ultimo", docId);
-  if (pestana !== "cuestionario") pestana = "conferencia";
+  if (!["cuestionario", "clase"].includes(pestana)) pestana = pestana === "conferencia" || !doc.leccion ? "conferencia" : "clase";
+  if (pestana === "clase" && !doc.leccion) pestana = "conferencia";
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
   const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "consulta" ? "Consulta" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
   const nPreg = doc.cuestionario?.length || 0;
   const pestanas = `<nav class="pestanas">
-      <a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${nombreTipo}</a>
+      ${doc.leccion ? `<a href="${base}/clase" class="${pestana === "clase" ? "activa" : ""}">Clase</a>` : ""}
+      <a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${doc.leccion ? "Diapositivas" : nombreTipo}</a>
       <a href="${base}/cuestionario" class="${pestana === "cuestionario" ? "activa" : ""}">Cuestionario${nPreg ? ` (${nPreg})` : ""}</a>
     </nav>`;
 
   let cuerpo = "";
-  if (pestana === "cuestionario") {
+  if (pestana === "clase") {
+    cuerpo = htmlLeccion(doc.leccion, doc) + (nPreg ? `<a class="btn-continuar lc-al-cuestionario" href="${base}/cuestionario">
+      <span class="btn-continuar-play">${ico("play")}</span><span class="btn-continuar-texto"><b>Autoevaluación</b><small>${nPreg} preguntas de esta clase</small></span>
+      <span class="btn-continuar-flecha">${ico("chevron")}</span></a>` : "");
+  } else if (pestana === "cuestionario") {
     cuerpo = nPreg
       ? await htmlCuestionario(doc)
       : `<div class="no-encontrado"><b>Todavía no hay cuestionario.</b>
@@ -2084,6 +2101,7 @@ async function vistaProgreso(asig, docs) {
      <nav class="pestanas">
        <a href="${enlaceAsig(id)}/conferencias">Conferencias</a>
        <a href="${enlaceAsig(id)}/libros">Libros</a>
+       ${asig.resumen ? `<a href="${enlaceAsig(id)}/resumen">Resumen</a>` : ""}
        <a href="${enlaceAsig(id)}/progreso" class="activa">Progreso</a>
      </nav>
      ${filas.length
@@ -2515,6 +2533,9 @@ document.addEventListener("click", async (ev) => {
     document.querySelectorAll(".res-anio").forEach((s2) => (s2.hidden = !!anio && s2.dataset.anio !== anio));
     document.querySelectorAll(".res-doc").forEach((d) => (d.hidden = !!tipo && d.dataset.tipo !== tipo));
     document.querySelectorAll(".res-asig").forEach((g) => (g.hidden = ![...g.querySelectorAll(".res-doc")].some((d) => !d.hidden)));
+  } else if (accion === "ir-seccion") {
+    ev.preventDefault();
+    document.getElementById(b.dataset.ancla)?.scrollIntoView({ behavior: "smooth", block: "start" });
   } else if (accion === "anadir") {
     destinoCarga = { auto: true };
     $archivo.value = "";
