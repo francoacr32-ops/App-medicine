@@ -826,7 +826,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 2.2.2 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 2.3 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1172,13 +1172,14 @@ async function vistaDoc(docId, pestana, irA = 0) {
   guardarPref("ultimo", docId);
   if (!["cuestionario", "clase"].includes(pestana)) pestana = pestana === "conferencia" || !doc.leccion ? "conferencia" : "clase";
   if (pestana === "clase" && !doc.leccion) pestana = "conferencia";
+  if (pestana === "conferencia" && doc.leccion && !tieneVisual(doc)) pestana = "clase";
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
   const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "consulta" ? "Consulta" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
   const nPreg = doc.cuestionario?.length || 0;
   const pestanas = `<nav class="pestanas">
       ${doc.leccion ? `<a href="${base}/clase" class="${pestana === "clase" ? "activa" : ""}">Clase</a>` : ""}
-      <a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${doc.leccion ? "Diapositivas" : nombreTipo}</a>
+      ${!doc.leccion || tieneVisual(doc) ? `<a href="${base}/conferencia" class="${pestana === "conferencia" ? "activa" : ""}">${doc.leccion ? "Diapositivas" : nombreTipo}</a>` : ""}
       <a href="${base}/cuestionario" class="${pestana === "cuestionario" ? "activa" : ""}">Cuestionario${nPreg ? ` (${nPreg})` : ""}</a>
     </nav>`;
 
