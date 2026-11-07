@@ -825,7 +825,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 2.2 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 2.2.1 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1045,13 +1045,14 @@ async function vistaBuscar(ambito, q) {
   const atras = ambito === "todo" ? "#/" : ambito.startsWith("anio:") ? `#/anio/${ambito.slice(5)}` : enlaceAsig(ambito);
   poner("Buscando…", `<p class="vacio">Buscando en ${esc(nombreAmbito(ambito))}…</p>`, atras);
   const docs = await documentosDelAmbito(ambito);
-  const { terminos, resultados } = await buscar(q, docs);
+  // Hasta 3 resultados por material (páginas distintas), para que los libros grandes no tapen lo demás
+  const { terminos, resultados, enDoc } = await buscar(q, docs, 400, 3);
   const patrones = patronesDe(q);
+  const asigs = await db.listarAsignaturas();
 
-  const cabecera = `<form class="buscador" data-ambito="${esc(ambito)}">
-      <input name="q" type="search" value="${esc(q)}" required>
-      <button class="btn">Buscar</button></form>
-    <p class="migas">En ${esc(nombreAmbito(ambito))} · ${docs.length} materiales</p>`;
+  const cabecera = `<form class="buscador buscador-grande" data-ambito="${esc(ambito)}">
+      <span class="buscador-lupa">${ico("buscar")}</span>
+      <input name="q" type="search" value="${esc(q)}" required></form>`;
 
   let cuerpo;
   if (!docs.length) {
@@ -1062,22 +1063,59 @@ async function vistaBuscar(ambito, q) {
     cuerpo = `<div class="no-encontrado"><b>No encontré eso en los materiales.</b>
       <p>Prueba con otras palabras o un sinónimo, o busca en ${ambito === "todo" ? "otro tema" : `<a href="#/buscar/todo?q=${encodeURIComponent(q)}">toda la carrera</a>`}.</p></div>`;
   } else {
-    cuerpo = resultados
-      .map((r, i) => {
-        const e = r.extracto;
-        const texto = (e.cortadoIzq ? "…" : "") + resaltar(e.texto, patrones) + (e.cortadoDer ? "…" : "");
-        return `<article class="resultado">
-          <p class="cita">${cita(r.doc, r.etiqueta, r.pagina)}</p>
-          <p class="sub">${esc(r.doc.asignaturas.map(nombreAsig).join(" · "))}</p>
+    // Agrupar: año → asignatura → material (cada material con sus mejores páginas)
+    const grupos = new Map(); // asigId → { asig, docs: Map(docId → {doc, res: [], mejor}) , mejor }
+    resultados.forEach((r, i) => {
+      const asigId = r.doc.asignaturas.find((a) => ambito === "todo" || ambito.startsWith("anio:") ? true : a === ambito) || r.doc.asignaturas[0];
+      if (!grupos.has(asigId)) grupos.set(asigId, { asig: asigs.find((a) => a.id === asigId) || { id: asigId, anio: Number(asigId.split("|")[0]), nombre: asigId.split("|")[1] }, docs: new Map(), mejor: 0 });
+      const g = grupos.get(asigId);
+      if (!g.docs.has(r.doc.id)) g.docs.set(r.doc.id, { doc: r.doc, res: [], mejor: 0 });
+      const d = g.docs.get(r.doc.id);
+      d.res.push({ ...r, i });
+      d.mejor = Math.max(d.mejor, r.puntos);
+      g.mejor = Math.max(g.mejor, r.puntos);
+    });
+    const porAnio = new Map();
+    for (const g of grupos.values()) {
+      if (!porAnio.has(g.asig.anio)) porAnio.set(g.asig.anio, []);
+      porAnio.get(g.asig.anio).push(g);
+    }
+    const anios = [...porAnio.keys()].sort((x, y) => x - y);
+    const totalDocs = new Set(resultados.map((r) => r.doc.id)).size;
+    const totalVeces = [...enDoc.values()].reduce((s2, x) => s2 + x, 0);
+    const tarjetaRes = (r) => {
+      const e = r.extracto;
+      const texto = (e.cortadoIzq ? "…" : "") + resaltar(e.texto, patrones) + (e.cortadoDer ? "…" : "");
+      return `<div class="res-pagina">
+          <a class="res-pag-num" href="#/leer/${r.doc.id}/${r.pagina}?q=${encodeURIComponent(q)}">${esc(r.etiqueta)} ${r.pagina}</a>
           <p class="extracto">${texto}</p>
           <div class="acciones">
             <a class="btn mini" href="#/leer/${r.doc.id}/${r.pagina}?q=${encodeURIComponent(q)}">📖 Ver página</a>
-            <button class="btn mini" data-accion="leer-resultado" data-i="${i}">🔊 Escuchar</button>
-          </div></article>`;
-      })
-      .join("");
+            <button class="btn mini secundario" data-accion="leer-resultado" data-i="${r.i}">🔊 Escuchar</button>
+          </div></div>`;
+    };
+    cuerpo = `
+      <p class="res-resumen">Sale <b>${totalVeces}</b> ${totalVeces === 1 ? "vez" : "veces"} en <b>${totalDocs}</b> material${totalDocs === 1 ? "" : "es"} de <b>${grupos.size}</b> asignatura${grupos.size === 1 ? "" : "s"}</p>
+      ${anios.length > 1 ? `<nav class="filtros" aria-label="Filtrar por año"><button class="chip-filtro activo" data-accion="res-anio" data-anio="">Todos</button>
+        ${anios.map((a) => `<button class="chip-filtro" data-accion="res-anio" data-anio="${a}">${ANIOS[a - 1]} <small>${porAnio.get(a).reduce((s2, g) => s2 + g.docs.size, 0)}</small></button>`).join("")}</nav>` : ""}
+      <nav class="filtros" aria-label="Filtrar por tipo">${[["", "Todo"], ["clase", "Conferencias y talleres"], ["libro", "Libros"]].map(([v, t], k) =>
+        `<button class="chip-filtro ${k ? "" : "activo"}" data-accion="res-tipo" data-tipo="${v}">${t}</button>`).join("")}</nav>
+      ${anios.map((a) => `<section class="res-anio" data-anio="${a}">
+        <h2 class="res-anio-titulo">${ANIOS[a - 1]}</h2>
+        ${porAnio.get(a).sort((x, y) => y.mejor - x.mejor).map((g) => `<section class="res-asig">
+          <div class="res-asig-cab">${htmlMiniatura(g.asig.nombre, g.asig.anio)}
+            <span><b>${esc(g.asig.nombre)}</b><span class="sub">${g.docs.size} material${g.docs.size === 1 ? "" : "es"}</span></span></div>
+          ${[...g.docs.values()].sort((x, y) => (esLibro(x.doc) - esLibro(y.doc)) || (y.mejor - x.mejor)).map((d, k) => `
+            <details class="res-doc" data-tipo="${esLibro(d.doc) ? "libro" : "clase"}" ${k === 0 ? "open" : ""}>
+              <summary>${icono(d.doc)} <span class="res-doc-nombre">${esc(d.doc.nombre)}</span>
+                <span class="res-veces">${enDoc.get(d.doc.id)} ${enDoc.get(d.doc.id) === 1 ? "vez" : "veces"}</span></summary>
+              ${d.res.map(tarjetaRes).join("")}
+              ${enDoc.get(d.doc.id) > d.res.length ? `<a class="res-mas" href="#/buscar/${encodeURIComponent(d.doc.asignaturas[0])}?q=${encodeURIComponent(q)}">Buscar solo en ${esc(nombreAsig(d.doc.asignaturas[0]))} →</a>` : ""}
+            </details>`).join("")}
+        </section>`).join("")}
+      </section>`).join("")}`;
   }
-  poner(`Resultados`, cabecera + cuerpo, atras);
+  poner(`Resultados`, cabecera + `<p class="migas">En ${esc(nombreAmbito(ambito))} · ${docs.length} materiales</p>` + cuerpo, atras);
   vistaBuscar.ultimos = resultados;
 }
 
@@ -1973,6 +2011,7 @@ async function exportarPaquete(ambito, conProgreso) {
       return;
     }
     // Con diapositivas o PDF: un .zip con paquete.json + las imágenes y PDF originales
+    const sinPdf = [];
     const JSZip = await cargarJSZip();
     const zip = new JSZip();
     for (let k = 0; k < docs.length; k++) {
@@ -1991,10 +2030,13 @@ async function exportarPaquete(ambito, conProgreso) {
         if (total) m.diapositivas = { carpeta, total };
       }
       if (d.pdf) {
+        // Los libros y los PDF pesados no van en la copia: se pasan aparte por Zapya
         const blob = await db.obtenerArchivo(d.id);
-        if (blob) {
+        if (blob && !esLibro(d) && blob.size <= 25 * 1048576) {
           m.pdf = `archivos/${String(k + 1).padStart(3, "0")}.pdf`;
           zip.file(m.pdf, blob);
+        } else if (blob) {
+          sinPdf.push(d.nombre);
         }
       }
     }
@@ -2003,6 +2045,7 @@ async function exportarPaquete(ambito, conProgreso) {
     const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
     mostrarProgreso(null);
     await compartirArchivo(base + ".zip", blob, "application/zip");
+    if (sinPdf.length) alert(`La copia se hizo sin ${sinPdf.length} libro${sinPdf.length === 1 ? "" : "s"} o PDF pesado${sinPdf.length === 1 ? "" : "s"} (para que no pese varios GB):\n• ${sinPdf.slice(0, 8).join("\n• ")}${sinPdf.length > 8 ? "\n• …" : ""}\n\nSu texto, tus notas y tu progreso sí están en la copia. Los PDF de los libros pásalos aparte por Zapya.`);
   } catch (e) {
     mostrarProgreso(null);
     alert("No se pudo crear el archivo: " + e.message);
@@ -2465,6 +2508,13 @@ document.addEventListener("click", async (ev) => {
     mostrarPregunta(Number(b.dataset.i));
   } else if (accion === "menu") {
     abrirMenu();
+  } else if (accion === "res-anio" || accion === "res-tipo") {
+    b.parentElement.querySelectorAll(".chip-filtro").forEach((x) => x.classList.toggle("activo", x === b));
+    const anio = document.querySelector("[data-accion=res-anio].activo")?.dataset.anio || "";
+    const tipo = document.querySelector("[data-accion=res-tipo].activo")?.dataset.tipo || "";
+    document.querySelectorAll(".res-anio").forEach((s2) => (s2.hidden = !!anio && s2.dataset.anio !== anio));
+    document.querySelectorAll(".res-doc").forEach((d) => (d.hidden = !!tipo && d.dataset.tipo !== tipo));
+    document.querySelectorAll(".res-asig").forEach((g) => (g.hidden = ![...g.querySelectorAll(".res-doc")].some((d) => !d.hidden)));
   } else if (accion === "anadir") {
     destinoCarga = { auto: true };
     $archivo.value = "";

@@ -18,7 +18,7 @@ function patron(termino) {
  * @param {Array} documentos lista de documentos donde buscar
  * @returns {{terminos: string[], resultados: Array}}
  */
-export async function buscar(consulta, documentos, maximo = 25) {
+export async function buscar(consulta, documentos, maximo = 25, porDocumento = Infinity) {
   const terminos = terminosDeBusqueda(consulta);
   if (!terminos.length) return { terminos, resultados: [] };
   const patrones = terminos.map(patron);
@@ -66,15 +66,29 @@ export async function buscar(consulta, documentos, maximo = 25) {
   }
 
   candidatos.sort((a, b) => b.puntos - a.puntos);
-  const resultados = candidatos.slice(0, maximo).map((c) => ({
+  // Cuántas veces sale en cada material, y como mucho `porDocumento` resultados (de páginas distintas)
+  // por material: así un libro enorme no tapa a las conferencias.
+  const enDoc = new Map();
+  const elegidos = [];
+  const paginasVistas = new Set();
+  for (const c of candidatos) {
+    enDoc.set(c.doc.id, (enDoc.get(c.doc.id) || 0) + 1);
+    const ya = elegidos.filter((x) => x.doc.id === c.doc.id).length;
+    const clavePag = c.doc.id + "|" + c.frag.pagina;
+    if (ya >= porDocumento || paginasVistas.has(clavePag) || elegidos.length >= maximo) continue;
+    paginasVistas.add(clavePag);
+    elegidos.push(c);
+  }
+  const resultados = elegidos.map((c) => ({
     doc: c.doc,
     pagina: c.frag.pagina,
     etiqueta: c.frag.etiqueta,
     texto: c.frag.texto,
     puntos: c.puntos,
     extracto: extracto(c.frag.texto, c.norm, patrones),
+    enDocumento: enDoc.get(c.doc.id),
   }));
-  return { terminos, resultados };
+  return { terminos, resultados, enDoc };
 }
 
 /** Busca dónde aparecen los términos (para resaltarlos). Devuelve [[inicio, fin], ...] */

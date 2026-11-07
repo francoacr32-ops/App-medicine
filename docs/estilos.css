@@ -1283,3 +1283,23 @@ main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
 .libros-texto .grande .ico { color: var(--acento-2); }
 .libro-texto { display: flex; flex-direction: column; padding: 8px 0; border-bottom: 1px solid var(--borde); }
 .libro-texto:last-of-type { border-bottom: 0; }
+
+/* Resultados del buscador agrupados por año y asignatura */
+.res-resumen { margin: 4px 0 10px; font-size: .9rem; color: var(--suave); }
+.res-resumen b { color: var(--texto); }
+.res-anio-titulo { font-size: 1.15rem; margin: 18px 0 8px; }
+.res-asig { margin-bottom: 14px; padding: 10px; border-radius: 20px; background: color-mix(in srgb, var(--acento-2) 6%, var(--tarjeta)); border: 1px solid var(--borde); }
+.res-asig-cab { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.res-asig-cab .miniatura { width: 46px; height: 46px; border-radius: 12px; }
+.res-asig-cab > span { display: flex; flex-direction: column; }
+.res-doc { margin-top: 8px; border-radius: 14px; background: var(--tarjeta); border: 1px solid var(--borde); overflow: hidden; }
+.res-doc summary { display: flex; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; list-style: none; font-weight: 700; font-size: .92rem; }
+.res-doc summary::-webkit-details-marker { display: none; }
+.res-doc-nombre { flex: 1; min-width: 0; }
+.res-veces { flex: none; padding: 2px 9px; border-radius: 999px; font-size: .74rem; color: #04262a; background: linear-gradient(90deg, #6ff3ea, #2ee6dc); }
+.res-pagina { padding: 8px 12px 10px; border-top: 1px solid var(--borde); }
+.res-pag-num { display: inline-block; font-size: .78rem; font-weight: 800; color: var(--acento); text-decoration: none; margin-bottom: 2px; }
+.res-pagina .extracto { margin: 2px 0 6px; font-size: .9rem; }
+.res-mas { display: block; padding: 8px 12px 10px; font-size: .82rem; font-weight: 700; border-top: 1px solid var(--borde); }
+.filtros .chip-filtro small { opacity: .7; margin-left: 2px; }
+button.chip-filtro { font: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; }
