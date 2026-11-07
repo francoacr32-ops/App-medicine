@@ -1,0 +1,65 @@
+# Arma el APK de Finlay Extractor en GitHub cada vez que cambia su código,
+# y lo publica en la página "Releases" del repositorio para descargarlo desde el teléfono.
+name: Finlay Extractor (APK)
+
+on:
+  push:
+    paths:
+      - "extractor/**"
+      - ".github/workflows/finlay-extractor.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Preparar la firma (desde los secretos del repositorio)
+        env:
+          FIRMA_BASE64: ${{ secrets.FIRMA_BASE64 }}
+        run: |
+          if [ -n "$FIRMA_BASE64" ]; then
+            echo "$FIRMA_BASE64" | base64 -d > "$RUNNER_TEMP/firma.keystore"
+            echo "FIRMA_ARCHIVO=$RUNNER_TEMP/firma.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Sin el secreto FIRMA_BASE64: el APK sale con la firma de prueba."
+          fi
+
+      - name: Construir el APK
+        env:
+          FIRMA_CLAVE: ${{ secrets.FIRMA_CLAVE }}
+        run: gradle -p extractor assembleRelease --no-daemon --stacktrace
+
+      - name: Ponerle nombre
+        run: cp extractor/app/build/outputs/apk/release/app-release.apk "FinlayExtractor-1.0.${{ github.run_number }}.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FinlayExtractor-1.0.${{ github.run_number }}
+          path: FinlayExtractor-*.apk
+
+      - name: Publicar en Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: extractor-v1.0.${{ github.run_number }}
+          name: Finlay Extractor 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          make_latest: true
+          files: FinlayExtractor-*.apk
+          body: |
+            **Finlay Extractor 1.0.${{ github.run_number }}**
+            Toca el archivo **FinlayExtractor-1.0.${{ github.run_number }}.apk** (abajo, en Assets) para descargarlo e instalarlo.
+            Se instala encima de la versión anterior sin perder nada.

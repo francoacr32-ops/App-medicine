@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="fondo">#F4F9FB</color>
+    <color name="tarjeta">#FFFFFF</color>
+    <color name="texto">#0F2233</color>
+    <color name="suave">#5B6F7C</color>
+    <color name="acento">#0D7F8C</color>
+    <color name="acento2">#14B8C4</color>
+    <color name="borde">#DDE9EE</color>
+    <color name="peligro">#B3261E</color>
+</resources>

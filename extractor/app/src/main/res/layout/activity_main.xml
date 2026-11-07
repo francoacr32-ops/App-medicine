@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Cabecera -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ImageView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:contentDescription="@null"
+                android:src="@mipmap/ic_launcher" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="14dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView style="@style/Titulo" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Finlay Extractor" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Saca el texto de tus PDF, sin internet" android:textColor="@color/suave" android:textSize="16sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Paso 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="22dp"
+            android:background="@drawable/tarjeta"
+            android:orientation="vertical"
+            android:padding="18dp">
+            <TextView style="@style/Paso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="PASO 1 · TU CARPETA DE PDF" />
+            <TextView
+                android:id="@+id/carpeta"
+                style="@style/Texto"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Todavía no elegiste la carpeta." />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="6dp"
+                android:text="Elige la carpeta principal: la que tiene adentro «Primer año», «Segundo año»… y dentro de cada año, las asignaturas."
+                android:textColor="@color/suave" android:textSize="15sp" />
+            <Button android:id="@+id/elegir" style="@style/BotonSecundario" android:text="📁  Elegir carpeta" />
+        </LinearLayout>
+
+        <!-- Paso 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/tarjeta"
+            android:orientation="vertical"
+            android:padding="18dp">
+            <TextView style="@style/Paso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="PASO 2 · SACAR EL TEXTO" />
+            <TextView
+                android:id="@+id/porcentaje"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="0 %"
+                android:textColor="@color/texto"
+                android:textSize="44sp"
+                android:textStyle="bold" />
+            <ProgressBar
+                android:id="@+id/barra"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="18dp"
+                android:max="1000"
+                android:progressDrawable="@drawable/barra" />
+            <TextView
+                android:id="@+id/fase"
+                style="@style/Texto"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:textStyle="bold"
+                android:text="Listo para empezar" />
+            <TextView
+                android:id="@+id/detalle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/suave"
+                android:textSize="16sp" />
+            <TextView
+                android:id="@+id/errores"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:textColor="@color/peligro"
+                android:textSize="16sp"
+                android:visibility="gone" />
+            <Button android:id="@+id/empezar" style="@style/Boton" android:text="▶  Empezar" />
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:text="Puedes apagar la pantalla: sigue trabajando. Si se interrumpe, al volver a tocar Empezar continúa donde iba. Mejor con el teléfono cargando."
+                android:textColor="@color/suave" android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- Paso 3 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/tarjeta"
+            android:orientation="vertical"
+            android:padding="18dp">
+            <TextView style="@style/Paso" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="0dp" android:text="PASO 3 · TUS ARCHIVOS DE TEXTO" />
+            <TextView
+                android:id="@+id/resumen"
+                style="@style/Texto"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="Todavía no hay archivos." />
+            <Button android:id="@+id/compartir" style="@style/Boton" android:text="📤  Compartir los textos" />
+            <Button android:id="@+id/guardar" style="@style/BotonSecundario" android:text="💾  Guardar en una carpeta" />
+            <Button android:id="@+id/verErrores" style="@style/BotonSecundario" android:text="⚠  Ver los PDF con error" />
+            <Button android:id="@+id/reiniciar" style="@style/BotonSecundario" android:text="↺  Empezar de cero" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:gravity="center"
+            android:text="Todo funciona sin internet. Los PDF escaneados se leen con OCR (reconocimiento de texto)."
+            android:textColor="@color/suave"
+            android:textSize="14sp" />
+    </LinearLayout>
+</ScrollView>
