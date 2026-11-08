@@ -1,6 +1,6 @@
 // Permite abrir Finlay sin conexión y ahorra datos: los archivos se guardan en el teléfono.
 
-const VERSION = "finlay-v47";
+const VERSION = "finlay-v48";
 const BASICOS = [
   "./",
   "index.html",
