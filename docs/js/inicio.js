@@ -40,6 +40,8 @@ const ICONOS_ASIG = [
   ["oftalmolog", "oftalmologia"], ["comunidad", "comunidad"], ["salud publica", "salud-publica"],
   ["ciencia, tecnologia", "cts"], ["tecnologia y sociedad", "cts"],
   ["medicina general integral", "mgi"], ["mgi", "mgi"],
+  ["introduccion a la clinica", "propedeutica"], ["farmacolog", "medicina-interna"], ["anatomia patolog", "celula"],
+  ["medicina natural", "mgi"], ["otorrino", "oftalmologia"],
 ];
 export function imagenAsignatura(nombre, anio) {
   const n = sinTildes(nombre).toLowerCase();
