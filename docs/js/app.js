@@ -826,7 +826,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 2.3 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 2.4 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -2793,7 +2793,7 @@ async function router() {
     else if (partes[0] === "perfil") await vistaPerfil();
     else if (partes[0] === "anio") await vistaAnio(Number(partes[1]));
     else if (partes[0] === "asig") await vistaAsignatura(partes[1], partes[2]);
-    else if (partes[0] === "buscar") await vistaBuscar(partes[1], q);
+    else if (partes[0] === "buscar") await vistaBuscar(partes[1] || "todo", q);
     else if (partes[0] === "leer") await vistaLeer(partes[1], Number(partes[2]), q);
     else if (partes[0] === "doc") {
       if (vistaDoc.docId !== partes[1]) vistaDoc.filtro = "todas";

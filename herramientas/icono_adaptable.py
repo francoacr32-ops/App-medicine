@@ -3,7 +3,7 @@
 Android 8 y posteriores recortan el ícono con la forma del teléfono (círculo, cuadrado redondeado…).
 Si el ícono no es adaptable, lo encogen y le ponen un fondo blanco. Con dos capas de 108 dp:
   - fondo: el verde oscuro del logo, que llena toda la forma;
-  - frente: la cruz y la palabra "Finlay", dentro de la zona segura del centro (66 dp).
+  - frente: la cruz de cristal, dentro de la zona segura del centro (66 dp).
 
 Uso:  python herramientas/icono_adaptable.py LOGO.jpg
 Salida: android/res/icono_fondo.png, android/res/icono_frente.png (432 px = 108 dp a 4x)
@@ -17,13 +17,13 @@ from PIL import Image, ImageDraw, ImageFilter
 
 RAIZ = Path(__file__).resolve().parent.parent
 LADO = 432               # 108 dp × 4
-CONTENIDO = 0.47         # el dibujo ocupa el 47 % del lado: cabe entero incluso en un círculo
+CONTENIDO = 0.50         # el dibujo ocupa el 50 % del lado: cabe entero incluso en un círculo
 
 logo = Image.open(sys.argv[1]).convert("RGB")
 W = logo.width
-# Interior del marco plateado y caja del dibujo (cruz + texto), en proporción al logo original
+# Interior del marco plateado y caja del dibujo (la cruz), en proporción al logo original
 interior = logo.crop((int(W * .10), int(W * .10), int(W * .90), int(W * .90)))
-caja = (int(W * .13), int(W * .10), int(W * .89), int(W * .87))
+caja = (int(W * .14), int(W * .14), int(W * .86), int(W * .86))
 
 # ---- Color de fondo: el verde oscuro del interior del logo
 arr = np.array(interior).astype(float)
@@ -37,17 +37,17 @@ def fondo_degradado(lado):
     d = np.sqrt((x - lado / 2) ** 2 + (y - lado * .45) ** 2) / (lado * .7)
     luz = np.clip(1 - d, 0, 1) ** 2 * 0.22
     base = np.array(color, float)
-    brillo = np.array([20, 120, 90], float)
+    brillo = np.array([10, 110, 100], float)
     img = base[None, None, :] * (1 - luz[..., None]) + brillo[None, None, :] * luz[..., None]
     return Image.fromarray(np.clip(img, 0, 255).astype("uint8"))
 
 
 def frente(lado, proporcion):
-    """La cruz y el texto, recortados del logo, con bordes suaves para fundirse con el fondo."""
+    """La cruz, recortada del logo, con bordes suaves para fundirse con el fondo."""
     dibujo = logo.crop(caja)
     escala = lado * proporcion / max(dibujo.size)
     dibujo = dibujo.resize((round(dibujo.width * escala), round(dibujo.height * escala)), Image.LANCZOS)
-    # transparencia según el brillo: el fondo oscuro desaparece, la cruz, el texto y su brillo quedan
+    # transparencia según el brillo: el fondo oscuro desaparece, la cruz y su brillo quedan
     a = np.array(dibujo).astype(float)
     luz = a.max(axis=2) - np.array(color, float).max()
     alfa = np.clip(luz / 70, 0, 1) * 255
