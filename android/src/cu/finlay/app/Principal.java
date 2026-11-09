@@ -352,18 +352,36 @@ public class Principal extends Activity {
         }
     }
 
+    /** Copia el archivo a la carpeta que entrega Archivos y devuelve su dirección content:// */
+    Uri prepararParaOtraApp(String nombre, byte[] bytes) throws IOException {
+        File carpeta = new File(getCacheDir(), "compartir");
+        carpeta.mkdirs();
+        File[] viejos = carpeta.listFiles();
+        if (viejos != null) for (File f : viejos) f.delete();
+        String seguro = nombre.replaceAll("[\\\\/:*?\"<>|]", "-");
+        File archivo = new File(carpeta, seguro);
+        FileOutputStream sal = new FileOutputStream(archivo);
+        sal.write(bytes);
+        sal.close();
+        return Uri.parse("content://" + Archivos.AUTORIDAD + "/" + Uri.encode(seguro));
+    }
+
+    /** «Abrir con…»: por ejemplo WPS, para pasar un .ppt o .doc viejo a PDF */
+    void abrirCon(String nombre, byte[] bytes, String mime) {
+        try {
+            Uri uri = prepararParaOtraApp(nombre, bytes);
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(uri, mime);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "Abrir " + nombre + " con…"));
+        } catch (Exception e) {
+            Toast.makeText(this, "No hay ninguna app para abrirlo. Instala WPS Office.", Toast.LENGTH_LONG).show();
+        }
+    }
+
     void enviar(String nombre, byte[] bytes, String mime) {
         try {
-            File carpeta = new File(getCacheDir(), "compartir");
-            carpeta.mkdirs();
-            File[] viejos = carpeta.listFiles();
-            if (viejos != null) for (File f : viejos) f.delete();
-            String seguro = nombre.replaceAll("[\\\\/:*?\"<>|]", "-");
-            File archivo = new File(carpeta, seguro);
-            FileOutputStream sal = new FileOutputStream(archivo);
-            sal.write(bytes);
-            sal.close();
-            Uri uri = Uri.parse("content://" + Archivos.AUTORIDAD + "/" + Uri.encode(seguro));
+            Uri uri = prepararParaOtraApp(nombre, bytes);
             Intent i = new Intent(Intent.ACTION_SEND);
             i.setType(mime);
             i.putExtra(Intent.EXTRA_STREAM, uri);
@@ -472,6 +490,20 @@ public class Principal extends Activity {
         public void limpiarRecibidos() {
             File[] viejos = new File(getCacheDir(), "recibidos").listFiles();
             if (viejos != null) for (File f : viejos) f.delete();
+        }
+
+        /** Igual que terminarArchivo, pero lo abre con otra app (WPS…) en vez de guardar o enviar. */
+        @JavascriptInterface
+        public void abrirArchivo(final String nombre, final String mime) {
+            final byte[] bytes;
+            synchronized (Principal.this) {
+                if (trozos == null) return;
+                bytes = trozos.toByteArray();
+                trozos = null;
+            }
+            runOnUiThread(new Runnable() {
+                @Override public void run() { abrirCon(nombre, bytes, mime); }
+            });
         }
 
         @JavascriptInterface

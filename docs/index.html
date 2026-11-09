@@ -28,7 +28,16 @@
     <button id="atras" class="atras" aria-label="Atrás" hidden></button>
     <h1 id="titulo">Finlay</h1>
   </header>
-  <main id="app"><p class="vacio">Cargando…</p></main>
+  <main id="app"></main>
+  <div id="arranque" class="arranque" aria-label="Abriendo Finlay">
+    <div class="arranque-centro">
+      <img class="arranque-logo" src="iconos/cruz.webp" alt="">
+      <h1 class="arranque-nombre">Finlay</h1>
+      <p class="arranque-lema">Estudio médico</p>
+      <svg class="arranque-ecg" viewBox="0 0 200 40" aria-hidden="true"><path d="M0 20 H70 L80 20 L86 6 L94 34 L102 2 L110 30 L116 20 H200"/></svg>
+      <p class="arranque-texto">Preparando tu estudio…</p>
+    </div>
+  </div>
 
   <nav id="nav" class="nav-inferior" aria-label="Secciones"></nav>
 
@@ -38,7 +47,15 @@
 
   <input id="archivo" type="file" multiple hidden>
   <input id="paquete" type="file" hidden>
-  <div id="progreso" class="progreso" hidden><div><span class="rueda"></span><p></p></div></div>
+  <div id="progreso" class="progreso" role="status" aria-live="polite" hidden>
+    <div class="progreso-caja">
+      <img class="progreso-doctor" src="iconos/doctor/lee.webp" alt="">
+      <h3 class="progreso-titulo">Un momento…</h3>
+      <div class="progreso-barra"><span></span></div>
+      <p class="progreso-pct"></p>
+      <p class="progreso-detalle"></p>
+    </div>
+  </div>
   <div id="visor" class="visor" role="dialog" aria-label="Dónde está la respuesta" hidden>
     <div class="visor-caja">
       <header class="visor-barra">

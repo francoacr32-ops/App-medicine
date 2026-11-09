@@ -55,6 +55,13 @@ public class Archivos extends ContentProvider {
         if (n == null) return null;
         if (n.endsWith(".json")) return "application/json";
         if (n.endsWith(".txt")) return "text/plain";
+        String m = n.toLowerCase(java.util.Locale.ROOT);
+        if (m.endsWith(".pdf")) return "application/pdf";
+        if (m.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
+        if (m.endsWith(".doc")) return "application/msword";
+        if (m.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+        if (m.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        if (m.endsWith(".zip")) return "application/zip";
         return "application/octet-stream";
     }
 

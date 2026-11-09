@@ -1,17 +1,17 @@
-// Extrae el texto de PDF, Word (.docx), PowerPoint (.pptx) y .txt dentro del teléfono.
+// Extrae el texto de PDF, Word (.docx y .doc), PowerPoint (.pptx y .ppt) y .txt dentro del teléfono.
 // Devuelve una lista de páginas: [{ n, etiqueta, texto }]
 //   etiqueta: "pág." (PDF y Word), "diap." (PowerPoint) o "parte" (texto sin páginas)
 
 import { limpiar } from "./texto.js";
+import { textoDePpt, textoDeDoc } from "./viejos.js";
 
 const BASE = new URL("../lib/", import.meta.url).href;
 
-export const FORMATOS = ".pdf,.docx,.pptx,.txt";
+export const FORMATOS = ".pdf,.docx,.pptx,.doc,.ppt,.txt";
 
 export function tipoDeArchivo(nombre) {
   const ext = nombre.toLowerCase().split(".").pop();
-  if (["pdf", "docx", "pptx", "txt"].includes(ext)) return ext;
-  if (ext === "doc" || ext === "ppt") return "viejo";
+  if (["pdf", "docx", "pptx", "doc", "ppt", "txt"].includes(ext)) return ext;
   return null;
 }
 
@@ -21,9 +21,35 @@ export async function extraerTexto(archivo, progreso = () => {}) {
   if (tipo === "docx") return extraerDocx(archivo);
   if (tipo === "pptx") return extraerPptx(archivo);
   if (tipo === "txt") return dividirEnPartes(await archivo.text());
-  if (tipo === "viejo")
-    throw new Error("Es un formato antiguo (.doc/.ppt). Ábrelo con WPS u Office y guárdalo como .docx o .pptx.");
-  throw new Error("Formato no compatible. Usa PDF, Word (.docx), PowerPoint (.pptx) o .txt.");
+  if (tipo === "doc" || tipo === "ppt") return extraerViejo(archivo, tipo);
+  throw new Error("Formato no compatible. Usa PDF, Word, PowerPoint o .txt.");
+}
+
+// ---------- Word y PowerPoint viejos (.doc y .ppt, de Office 97-2003) ----------
+let cfbPromesa = null;
+function cargarCfb() {
+  if (!cfbPromesa) {
+    cfbPromesa = new Promise((resolver, rechazar) => {
+      if (window.CFB) return resolver(window.CFB);
+      const s = document.createElement("script");
+      s.src = BASE + "cfb.min.js";
+      s.onload = () => resolver(window.CFB);
+      s.onerror = () => { cfbPromesa = null; rechazar(new Error("No se pudo cargar el lector de Office viejo.")); };
+      document.head.appendChild(s);
+    });
+  }
+  return cfbPromesa;
+}
+async function extraerViejo(archivo, tipo) {
+  const CFB = await cargarCfb();
+  let paginas;
+  try {
+    const datos = new Uint8Array(await archivo.arrayBuffer());
+    paginas = tipo === "ppt" ? textoDePpt(CFB, datos) : textoDeDoc(CFB, datos);
+  } catch (e) {
+    throw new Error(`No se pudo leer este ${tipo === "ppt" ? "PowerPoint" : "Word"} viejo (.${tipo}). Ábrelo con WPS y expórtalo a PDF.`);
+  }
+  return paginas.map((p) => ({ ...p, texto: limpiar(p.texto) }));
 }
 
 // ---------- PDF ----------

@@ -113,5 +113,5 @@ export function asignaturaProbable(nombreArchivo, texto, asignaturas) {
 
 /** Nombre limpio para mostrar: sin extensión ni guiones bajos */
 export function nombreLimpio(nombreArchivo) {
-  return nombreArchivo.replace(/\.(pdf|docx|pptx|txt)$/i, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
+  return nombreArchivo.replace(/\.(pdf|docx|pptx|doc|ppt|txt)$/i, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 }
