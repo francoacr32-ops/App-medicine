@@ -1374,3 +1374,31 @@ button.chip-filtro { font: inherit; font-weight: 600; font-size: .9rem; cursor: 
 .tabla-asignaturas td { padding: 6px 4px; border-bottom: 1px solid var(--borde); }
 .tabla-asignaturas td:nth-child(2) { white-space: nowrap; text-align: right; color: var(--suave); }
 .tabla-asignaturas td:last-child { width: 2.4em; text-align: right; }
+.doc-num { display: inline-grid; place-items: center; min-width: 1.9em; height: 1.9em; padding: 0 4px; margin-right: 6px; border-radius: 999px;
+  background: var(--acento); color: var(--acento-texto); font-size: .85em; vertical-align: middle; }
+
+/* Guía del Dr. Finlay */
+.guia { display: flex; flex-direction: column; gap: 14px; }
+.guia-escena { position: relative; min-height: 440px; padding-bottom: 6px; }
+.guia-globo { position: relative; z-index: 1; margin-right: 34%; padding: 16px 16px 14px; border-radius: 20px; background: var(--tarjeta);
+  border: 2px solid var(--acento); box-shadow: var(--sombra); }
+.guia-globo::after { content: ""; position: absolute; right: -14px; bottom: 34px; border: 12px solid transparent; border-left-color: var(--acento); border-right: 0; }
+.guia-globo h2 { margin: 4px 0 8px; font-size: 1.2rem; color: var(--texto); }
+.guia-globo p { margin: 0 0 10px; line-height: 1.5; }
+.guia-paso { font-size: .78rem; font-weight: 700; color: var(--acento); text-transform: uppercase; letter-spacing: .04em; }
+.guia-ir { margin-top: 2px; }
+.guia-doctor { position: absolute; right: -6px; bottom: 0; width: 46%; max-width: 230px; pointer-events: none;
+  animation: guia-entra .45s ease-out; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .18)); }
+@keyframes guia-entra { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+.guia-puntos { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.guia-puntos a { width: 9px; height: 9px; border-radius: 50%; background: var(--borde); }
+.guia-puntos a.activo { width: 22px; border-radius: 6px; background: var(--acento); }
+.guia-botones { display: flex; gap: 10px; }
+.guia-botones .btn { flex: 1; text-align: center; justify-content: center; }
+.guia-ajustes summary { cursor: pointer; font-weight: 700; }
+.guia-tarjeta { flex-direction: row; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 14px; text-decoration: none; color: inherit;
+  border: 2px solid var(--acento); }
+.guia-tarjeta img { width: 58px; height: 62px; object-fit: contain; }
+.guia-tarjeta span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.guia-tarjeta small { color: var(--suave); }
+@media (prefers-reduced-motion: reduce) { .guia-doctor { animation: none; } }

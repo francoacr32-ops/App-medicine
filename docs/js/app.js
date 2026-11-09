@@ -270,6 +270,8 @@ async function vistaInicio() {
         </label>
         <button class="btn btn-repasar solo-manual" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
         <a class="btn secundario btn-explorar" href="#/temas">Explorar los temas</a>
+        ${pref("guiaVista") ? "" : `<a class="tarjeta guia-tarjeta" href="#/ayuda/0"><img src="iconos/dis/doctor.webp" alt="">
+      <span><b>¿Primera vez en Finlay?</b><small>El Dr. Finlay te enseña la app en 2 minutos</small></span>${ico("chevron", "flecha-der")}</a>`}
         <p class="nota">En honor a Carlos J. Finlay, el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p>
       </section>`);
   }
@@ -355,6 +357,8 @@ async function vistaInicio() {
       <span class="btn-continuar-play">${ico("play")}</span>
       <span class="btn-continuar-texto"><b>Continuar estudiando</b>${docUltimo ? `<small>${esc(docUltimo.nombre)}</small>` : ""}</span>
       <span class="btn-continuar-flecha">${ico("chevron")}</span></a>
+    ${pref("guiaVista") ? "" : `<a class="tarjeta guia-tarjeta" href="#/ayuda/0"><img src="iconos/dis/doctor.webp" alt="">
+      <span><b>¿Primera vez en Finlay?</b><small>El Dr. Finlay te enseña la app en 2 minutos</small></span>${ico("chevron", "flecha-der")}</a>`}
     <div class="titulo-seccion"><h2>${ico("barras", "ico-titulo")}Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
     ${plan.join("")}
     <div class="titulo-seccion"><h2>Tus asignaturas</h2><a href="#/temas">Ver todas ${ico("chevron")}</a></div>
@@ -777,7 +781,7 @@ async function vistaPerfil() {
       ${filaCristal("#/copia", "documento", "Copia y compartir")}
       ${filaCristal("#/planes", "calendario", "Plan para el examen")}
       ${filaCristal("#/ajustes", "ajustes", "Configuración")}
-      ${filaCristal("#/ayuda", "ayuda", "Ayuda: cómo usar Finlay")}
+      ${filaCristal("#/ayuda/0", "ayuda", "Ayuda: el Dr. Finlay te enseña la app")}
     </nav>
     <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
     <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`, null, { sinBarra: true });
@@ -827,7 +831,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 3.6 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 3.7 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -988,7 +992,9 @@ async function vistaAnio(anio) {
 async function vistaAsignatura(id, pestana = "conferencias") {
   const asig = await db.obtenerAsignatura(id);
   if (!asig) return (location.hash = "#/");
-  const docs = (await db.documentosDeAsignatura(id)).sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
+  // En el orden en que se estudian (1, 2, 3…); lo que no trae número va después, por nombre
+  const docs = (await db.documentosDeAsignatura(id)).sort((a, b) =>
+    (a.orden ?? 1e9) - (b.orden ?? 1e9) || a.nombre.localeCompare(b.nombre, "es", { numeric: true }));
   if (pestana === "progreso") return vistaProgreso(asig, docs);
   if (pestana === "resumen" && asig.resumen) {
     return poner(asig.nombre, `<p class="migas">${esc(ANIOS[asig.anio - 1])}</p>
@@ -1004,8 +1010,8 @@ async function vistaAsignatura(id, pestana = "conferencias") {
 
   const items = lista
     .map(
-      (d) => `<li class="doc">
-        <a href="#/doc/${d.id}" class="doc-nombre">${icono(d)} ${esc(d.nombre)}</a>
+      (d, k) => `<li class="doc">
+        <a href="#/doc/${d.id}" class="doc-nombre">${tipo === "libro" ? icono(d) : `<b class="doc-num">${k + 1}</b>`} ${esc(d.nombre)}</a>
         <span class="sub">${d.paginas ? `${d.paginas} ${d.etiqueta === "diap." ? "diapositivas" : d.etiqueta === "parte" ? "partes" : "páginas"}` : "sin texto completo"}${d.asignaturas.length > 1 ? " · compartido en " + d.asignaturas.length + " asignaturas" : ""}${d.sinTexto ? ` · ⚠️ ${d.sinTexto} sin texto` : ""}</span>
         ${d.cuestionario || d.diapositivas || d.pdf ? `<span class="etiquetas">${d.diapositivas || d.pdf ? '<span class="chip">🖼️ Diapositivas</span>' : ""}${d.cuestionario ? `<span class="chip">❓ ${d.cuestionario.length} preguntas</span>` : ""}</span>` : ""}
         <span class="acciones solo-manual">
@@ -2170,7 +2176,7 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
   const porNombre = (a, b) => a.nombre.localeCompare(b.nombre, "es", { numeric: true });
   if (filtro === "favoritos" && orden === "nombre") docs.sort((a, b) => favs.indexOf(a.id) - favs.indexOf(b.id));
   else if (orden === "preguntas") docs.sort((a, b) => (b.cuestionario?.length || 0) - (a.cuestionario?.length || 0) || porNombre(a, b));
-  else if (orden === "asignatura") docs.sort((a, b) => a.asignaturas[0].localeCompare(b.asignaturas[0], "es", { numeric: true }) || porNombre(a, b));
+  else if (orden === "asignatura") docs.sort((a, b) => a.asignaturas[0].localeCompare(b.asignaturas[0], "es", { numeric: true }) || (a.orden ?? 1e9) - (b.orden ?? 1e9) || porNombre(a, b));
   else docs.sort(porNombre);
   const asigsConDocs = (await db.listarAsignaturas()).filter((a) => todos.some((d) => d.asignaturas.includes(a.id)));
   const enlace = (f, extra = {}) => {
@@ -2227,25 +2233,49 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
     </a>`, null, { marca: true });
 }
 
-function vistaAyuda() {
+// ---------- Guía: el Dr. Finlay explica la app paso a paso ----------
+const GUIA = [
+  { titulo: "¡Hola! Soy el Dr. Finlay", texto: "Te voy a enseñar cómo funciona la app en unos pocos pasos. Todo funciona <b>sin internet</b>: las clases, los cuestionarios y tu progreso viven en tu teléfono.", ir: null },
+  { titulo: "Inicio", texto: "Aquí ves tu <b>progreso de hoy</b>, tu <b>racha 🔥</b> de días seguidos estudiando y el botón <b>Continuar estudiando</b>, que te lleva justo a donde te quedaste. Abajo está <b>Hoy en tu plan</b>: lo que te toca repasar.", ir: ["#/", "Ir al Inicio"] },
+  { titulo: "Temas: tu carrera por años", texto: "Toca un <b>año</b> arriba (1ro a 5to) y luego la <b>asignatura</b>. Las clases están <b>numeradas 1, 2, 3…</b> en el orden en que se estudian, así sabes qué va después de qué.", ir: ["#/temas", "Ver los temas"] },
+  { titulo: "Las clases de Finlay", texto: "Cada clase es como una conferencia de la universidad: <b>motivación</b>, <b>objetivos</b>, explicación por partes con <b>tablas y esquemas</b>, casos clínicos y una <b>síntesis</b> con mapa conceptual. En las de anatomía tienes los <b>5 detalles anatómicos</b> más importantes del tema. Puedes <b>escucharlas</b> con la voz del teléfono.", ir: null },
+  { titulo: "Resumen de la asignatura", texto: "Dentro de cada asignatura, la pestaña <b>Resumen</b> trae el mapa general, lo que siempre debes recordar y consejos para estudiarla.", ir: null },
+  { titulo: "Cuestionarios", texto: "Cada clase tiene su <b>Cuestionario</b>: verdadero o falso, selección, enlazar columnas, completar y preguntas abiertas, como en los exámenes. Si fallas, te explico <b>por qué</b> y <b>📖 Ver dónde está</b> te lleva a la parte exacta de la clase.", ir: null },
+  { titulo: "Evaluaciones", texto: "El <b>repaso del día</b> te pregunta lo que fallas hasta que lo domines. El <b>examen de práctica</b> te pone nota de <b>2 a 5</b>, y el <b>🎓 Examen final</b> de cada año te da la nota por asignatura. También puedes hacer un <b>reto</b> con un compañero y poner la <b>fecha de tu examen</b> para que te arme un plan.", ir: ["#/evaluaciones", "Ir a Evaluaciones"] },
+  { titulo: "Biblioteca", texto: "Todas tus clases y conferencias juntas, con <b>buscador</b>, filtros, <b>Favoritos ❤</b> y el <b>Atlas</b> de imágenes. Con <b>Añadir materiales</b> cargas tus PDF, PowerPoint o Word y Finlay los pone solo en su asignatura.", ir: ["#/biblioteca", "Ir a la Biblioteca"] },
+  { titulo: "Desde WhatsApp", texto: "¿Te mandaron una conferencia por WhatsApp? Mantén el dedo sobre el archivo, toca <b>Compartir</b> y elige <b>Finlay</b>. La app la recibe, la organiza en su asignatura y el <b>PDF se ve igual</b> que el original, diapositiva por diapositiva.", ir: null },
+  { titulo: "Tarjetas y notas", texto: "Las <b>tarjetas de memoria</b> te preguntan los conceptos clave en el momento justo para no olvidarlos. Tus <b>notas y marcadores</b> quedan guardados en cada diapositiva.", ir: ["#/tarjetas", "Ver las tarjetas"] },
+  { titulo: "Progreso y logros", texto: "Ganas <b>puntos</b> al estudiar, subes de <b>nivel médico</b> (de estudiante de primer año a eminencia médica) y desbloqueas <b>medallas y trofeos</b>. En <b>Mi progreso</b> ves tus estadísticas y tu tiempo de estudio.", ir: ["#/progreso", "Ver mi progreso"] },
+  { titulo: "Perfil y configuración", texto: "Pon tu nombre y tu foto, el <b>modo oscuro</b>, el tamaño de letra, tu <b>meta diaria</b> y la voz. Haz <b>copia de seguridad</b> de vez en cuando para no perder tu progreso si cambias de teléfono.", ir: ["#/perfil", "Ir al Perfil"] },
+  { titulo: "¡Listo, a estudiar!", texto: "Eso es todo. Puedes volver a esta guía cuando quieras desde el <b>Perfil → Ayuda</b>. ¡Mucho éxito en la carrera, futuro doctor!", ir: ["#/temas", "Empezar a estudiar"] },
+];
+
+function vistaAyuda(paso = 0) {
+  const k = Math.max(0, Math.min(GUIA.length - 1, Number(paso) || 0));
+  const p = GUIA[k];
+  guardarPref("guiaVista", "1"); // ya la conoce: no se le vuelve a ofrecer en el Inicio
   poner(
     "Cómo usar Finlay",
-    `<ol class="ayuda">
-      <li><b>Inicio:</b> tu progreso general, tu racha 🔥, el botón <b>Continuar estudiando</b> (vuelve a la diapositiva donde te quedaste) y lo que te toca hoy.</li>
-      <li><b>Temas:</b> elige el año arriba y luego la asignatura. Cada conferencia tiene sus <b>diapositivas</b>, como en el PDF, y su <b>Cuestionario</b>. Aquí está también el buscador.</li>
-      <li><b>Biblioteca:</b> todas las conferencias, clases taller y libros con su portada. Toca ❤ en una conferencia para guardarla en <b>Favoritos</b>.</li>
-      <li><b>Cuestionarios:</b> una pregunta por pantalla. Responde y toca <b>Siguiente</b>. Si fallas, <b>📖 Ver dónde está</b> te lleva a la parte exacta de la conferencia, marcada en verde.</li>
-      <li><b>Evaluaciones:</b> el <b>repaso del día</b> (lo que fallas vuelve pronto), el <b>examen de práctica</b> con nota de 2 a 5 y el <b>plan para el examen</b>.</li>
-      <li><b>Perfil:</b> tu foto, nivel y puntos, <b>Mi progreso</b> (estadísticas, tiempo de estudio y logros), favoritos y la <b>copia de seguridad</b>.</li>
-      <li><b>Configuración</b> (⚙ en el inicio): tu nombre y foto, modo oscuro o automático por la hora, sonido, tamaño de letra, meta diaria y voz.</li>
-      <li>Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</li>
-    </ol>
+    `<section class="guia">
+      <div class="guia-escena">
+        <div class="guia-globo"><span class="guia-paso">${k + 1} de ${GUIA.length}</span><h2>${esc(p.titulo)}</h2><p>${p.texto}</p>
+          ${p.ir ? `<a class="btn mini guia-ir" href="${p.ir[0]}">${esc(p.ir[1])} ${ico("chevron")}</a>` : ""}</div>
+        <img class="guia-doctor" src="iconos/dis/doctor.webp" alt="El Dr. Finlay">
+      </div>
+      <div class="guia-puntos">${GUIA.map((_, i) => `<a href="#/ayuda/${i}" class="${i === k ? "activo" : ""}" aria-label="Paso ${i + 1}"></a>`).join("")}</div>
+      <div class="guia-botones">
+        ${k > 0 ? `<a class="btn secundario" href="#/ayuda/${k - 1}">Anterior</a>` : `<a class="btn secundario" href="#/">Saltar</a>`}
+        ${k < GUIA.length - 1 ? `<a class="btn" href="#/ayuda/${k + 1}">Siguiente</a>` : `<a class="btn" href="#/temas">¡A estudiar!</a>`}
+      </div>
+    </section>
+    ${k === GUIA.length - 1 ? `<details class="panel guia-ajustes"><summary>Ajustes rápidos</summary>
     <p class="nota">Meta diaria de preguntas:
       <select id="meta">${[5, 10, 15, 20, 30, 50].map((v) => `<option value="${v}" ${v === metaDiaria() ? "selected" : ""}>${v}</option>`).join("")}</select></p>
     <p class="nota">Velocidad de la voz:
       <select id="velocidad">${[0.8, 0.9, 1, 1.15, 1.3, 1.5].map((v) => `<option value="${v}" ${v === velocidadVoz() ? "selected" : ""}>${v}×</option>`).join("")}</select></p>
-    <p class="nota">⚠️ Si borras los datos del navegador, se borran los materiales cargados en Finlay (tus archivos originales no se tocan).</p>`,
-    "#/"
+    <p class="nota">Si la voz no suena en español, instala la voz española en Ajustes del teléfono → Idioma → Texto a voz.</p>
+    <p class="nota">⚠️ Si borras los datos de la app, se borran los materiales cargados en Finlay (tus archivos originales no se tocan).</p></details>` : ""}`,
+    "#/perfil"
   );
 }
 
@@ -2697,9 +2727,8 @@ document.addEventListener("click", async (ev) => {
 
 // Cargar paquetes de Claude
 const $paquete = document.getElementById("paquete");
-$paquete.addEventListener("change", async () => {
-  const archivo = $paquete.files[0];
-  if (!archivo) return;
+$paquete.addEventListener("change", () => $paquete.files[0] && cargarPaquete($paquete.files[0]));
+async function cargarPaquete(archivo) {
   try {
     mostrarProgreso("Leyendo el paquete…");
     const datos = await leerPaquete(archivo);
@@ -2722,7 +2751,40 @@ $paquete.addEventListener("change", async () => {
     console.error(e);
     alert("No se pudo cargar el paquete:\n" + (e?.name === "QuotaExceededError" ? "No queda espacio en el teléfono." : e.message));
   }
-});
+}
+
+// ---------- Conferencias compartidas desde WhatsApp, Telegram, Zapya… (solo en el APK) ----------
+let recibiendo = false;
+let preparandoPaquetes = false; // mientras se preparan los paquetes del APK, lo recibido espera
+async function recogerRecibidos() {
+  if (!window.FinlayAndroid?.tomarRecibidos || recibiendo || preparandoPaquetes) return;
+  let lista;
+  try { lista = JSON.parse(window.FinlayAndroid.tomarRecibidos() || "[]"); } catch { return; }
+  if (!lista.length) return;
+  recibiendo = true;
+  try {
+    const archivos = [];
+    for (const r of lista) {
+      mostrarProgreso(`📥 Recibiendo ${r.nombre}…`);
+      const blob = await (await fetch(r.url)).blob();
+      archivos.push(new File([blob], r.nombre, { type: r.tipo || blob.type }));
+    }
+    mostrarProgreso(null);
+    // Los paquetes de Finlay (.zip o .json) se cargan como paquete; lo demás se organiza como conferencia
+    const esPaquete = (a) => /\.(zip|json)$/i.test(a.name);
+    for (const p of archivos.filter(esPaquete)) await cargarPaquete(p);
+    const materiales = archivos.filter((a) => !esPaquete(a));
+    if (materiales.length) await anadirMateriales(materiales);
+  } catch (e) {
+    mostrarProgreso(null);
+    alert("No se pudo recibir el archivo:\n" + e.message);
+  } finally {
+    recibiendo = false;
+    try { window.FinlayAndroid.limpiarRecibidos(); } catch {}
+  }
+  recogerRecibidos(); // por si llegaron más mientras tanto
+}
+window.__finlayRecibidos = () => recogerRecibidos();
 
 document.addEventListener("input", () => modo === "examen" && contarExamen());
 document.addEventListener("change", (ev) => {
@@ -2844,7 +2906,7 @@ async function router() {
     else if (partes[0] === "planes") await vistaPlanes();
     else if (partes[0] === "plan") await vistaPlan(Number(partes[1]));
     else if (partes[0] === "copia") await vistaCopia();
-    else if (partes[0] === "ayuda") vistaAyuda();
+    else if (partes[0] === "ayuda") vistaAyuda(partes[1]);
     else await vistaInicio();
   } catch (e) {
     console.error(e);
@@ -2865,7 +2927,7 @@ tiempo.iniciarRegistro();
   revisarLogros(false); // los logros de antes se guardan sin llenar la pantalla de avisos
 })();
 window.addEventListener("hashchange", router);
-router().then(cargarPaquetesIncluidos);
+router().then(cargarPaquetesIncluidos).then(recogerRecibidos);
 
 // En el APK pueden venir paquetes dentro de la app: se cargan solos la primera vez
 async function cargarPaquetesIncluidos() {
@@ -2883,6 +2945,7 @@ async function cargarPaquetesIncluidos() {
   const pendientes = lista.filter((p) => hechos[p.archivo] !== p.version);
   if (!pendientes.length) return;
   if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
+  preparandoPaquetes = true;
   try {
     for (const [i, p] of pendientes.entries()) {
       mostrarProgreso(`Preparando las diapositivas (${i + 1} de ${pendientes.length})…\nSolo pasa una vez.`);
@@ -2899,6 +2962,7 @@ async function cargarPaquetesIncluidos() {
     console.error(e);
     alert("No se pudieron preparar las diapositivas:\n" + (e?.name === "QuotaExceededError" ? "No queda espacio en el teléfono." : e.message));
   }
+  preparandoPaquetes = false;
   router();
 }
 

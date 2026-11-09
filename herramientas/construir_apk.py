@@ -35,7 +35,16 @@ ATTR = {
     "configChanges": 0x0101001F, "minSdkVersion": 0x0101020C, "versionCode": 0x0101021B,
     "versionName": 0x0101021C, "windowSoftInputMode": 0x0101022B, "targetSdkVersion": 0x01010270,
     "allowBackup": 0x01010280, "hardwareAccelerated": 0x010102D3, "drawable": 0x01010199,
+    "launchMode": 0x0101001D, "mimeType": 0x01010026,
 }
+# Tipos de archivo que Finlay acepta al compartir desde WhatsApp, Telegram, Zapya o el administrador de archivos
+TIPOS_RECIBIDOS = [
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint", "application/msword",
+    "application/zip", "application/x-zip-compressed", "application/octet-stream",
+]
 NS_ANDROID = "http://schemas.android.com/apk/res/android"
 TEMA = 0x01030241          # @android:style/Theme.Material.Light.NoActionBar
 ICONO = 0x7F010000         # @drawable/icono (lo define resources.arsc)
@@ -165,11 +174,18 @@ def manifiesto(version_code, version_name):
                 a("exported", T_BOOL, 0xFFFFFFFF),
                 a("configChanges", T_HEX, 0x7B0),        # orientación, tamaño, teclado, modo noche
                 a("windowSoftInputMode", T_HEX, 0x10),   # adjustResize
+                a("launchMode", T_DEC, 2),               # singleTask: lo compartido llega a la Finlay ya abierta
             ], [
                 Elemento("intent-filter", [], [
                     Elemento("action", [a("name", T_STR, "android.intent.action.MAIN")]),
                     Elemento("category", [a("name", T_STR, "android.intent.category.LAUNCHER")]),
                 ]),
+                # «Compartir» → Finlay (uno o varios archivos) y «Abrir con» → Finlay
+                *[Elemento("intent-filter", [], [
+                    Elemento("action", [a("name", T_STR, accion)]),
+                    Elemento("category", [a("name", T_STR, "android.intent.category.DEFAULT")]),
+                    *[Elemento("data", [a("mimeType", T_STR, t)]) for t in TIPOS_RECIBIDOS],
+                ]) for accion in ("android.intent.action.SEND", "android.intent.action.SEND_MULTIPLE", "android.intent.action.VIEW")],
             ]),
             Elemento("provider", [
                 a("name", T_STR, PAQUETE + ".Archivos"),

@@ -6,7 +6,9 @@ import android.content.ClipData;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
+import android.database.Cursor;
 import android.os.Bundle;
+import android.provider.OpenableColumns;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.Window;
@@ -21,6 +23,7 @@ import android.webkit.WebViewClient;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,7 +35,8 @@ import java.util.Map;
 
 /**
  * Finlay para Android: muestra la app web (carpeta assets/www) dentro de una ventana propia
- * y le da tres cosas que el navegador interno no trae: elegir archivos, voz y guardar/compartir.
+ * y le da lo que el navegador interno no trae: elegir archivos, voz, guardar/compartir
+ * y recibir conferencias que se comparten desde WhatsApp, Telegram, Zapya o el administrador de archivos.
  */
 public class Principal extends Activity {
 
@@ -47,6 +51,8 @@ public class Principal extends Activity {
     boolean vozLista = false;
     String ultimoTrozo = null;
     byte[] pendienteGuardar;
+    /** Archivos recibidos y ya copiados, esperando a que la página los recoja (JSON de cada uno). */
+    final ArrayList<String> recibidos = new ArrayList<String>();
 
     @Override
     protected void onCreate(Bundle guardado) {
@@ -85,6 +91,91 @@ public class Principal extends Activity {
 
         if (guardado != null) web.restoreState(guardado);
         else web.loadUrl("https://" + HOST + "/index.html");
+        if (guardado == null) recibir(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        recibir(intent);
+    }
+
+    // ---------- Recibir conferencias compartidas desde otras apps ----------
+    void recibir(Intent intent) {
+        if (intent == null) return;
+        final ArrayList<Uri> uris = new ArrayList<Uri>();
+        String accion = intent.getAction();
+        try {
+            if (Intent.ACTION_SEND.equals(accion)) {
+                Uri u = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+                if (u != null) uris.add(u);
+            } else if (Intent.ACTION_SEND_MULTIPLE.equals(accion)) {
+                ArrayList<Uri> lista = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+                if (lista != null) uris.addAll(lista);
+            } else if (Intent.ACTION_VIEW.equals(accion) && intent.getData() != null) {
+                uris.add(intent.getData());
+            }
+            if (uris.isEmpty() && intent.getClipData() != null) {
+                ClipData clip = intent.getClipData();
+                for (int k = 0; k < clip.getItemCount(); k++) if (clip.getItemAt(k).getUri() != null) uris.add(clip.getItemAt(k).getUri());
+            }
+        } catch (Exception e) {
+            return;
+        }
+        if (uris.isEmpty()) return;
+        Toast.makeText(this, "📥 Recibiendo " + uris.size() + (uris.size() == 1 ? " archivo…" : " archivos…"), Toast.LENGTH_SHORT).show();
+        // Se copian ya (el permiso para leerlos dura poco) y en segundo plano (pueden pesar mucho)
+        new Thread(new Runnable() {
+            @Override public void run() {
+                File carpeta = new File(getCacheDir(), "recibidos");
+                carpeta.mkdirs();
+                int fallos = 0;
+                for (Uri u : uris) {
+                    try {
+                        String nombre = nombreDe(u);
+                        String seguro = System.currentTimeMillis() + "-" + nombre.replaceAll("[\\\\/:*?\"<>|]", "-");
+                        File destino = new File(carpeta, seguro);
+                        InputStream ent = getContentResolver().openInputStream(u);
+                        OutputStream sal = new FileOutputStream(destino);
+                        byte[] buf = new byte[65536];
+                        int n;
+                        while ((n = ent.read(buf)) > 0) sal.write(buf, 0, n);
+                        sal.close();
+                        ent.close();
+                        String tipo = getContentResolver().getType(u);
+                        org.json.JSONObject o = new org.json.JSONObject();
+                        o.put("nombre", nombre);
+                        o.put("url", "https://" + HOST + "/__recibidos/" + Uri.encode(seguro));
+                        o.put("tipo", tipo == null ? "" : tipo);
+                        synchronized (recibidos) { recibidos.add(o.toString()); }
+                    } catch (Exception e) {
+                        fallos++;
+                    }
+                }
+                final int f = fallos;
+                runOnUiThread(new Runnable() {
+                    @Override public void run() {
+                        if (f > 0) Toast.makeText(Principal.this, "No se pudieron leer " + f + " archivo(s)", Toast.LENGTH_LONG).show();
+                        web.evaluateJavascript("window.__finlayRecibidos && window.__finlayRecibidos()", null);
+                    }
+                });
+            }
+        }).start();
+    }
+
+    String nombreDe(Uri u) {
+        String nombre = null;
+        try {
+            Cursor c = getContentResolver().query(u, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null);
+            if (c != null) {
+                if (c.moveToFirst()) nombre = c.getString(0);
+                c.close();
+            }
+        } catch (Exception e) { }
+        if (nombre == null) nombre = u.getLastPathSegment();
+        if (nombre == null || nombre.trim().isEmpty()) nombre = "Conferencia.pdf";
+        return nombre;
     }
 
     @Override
@@ -120,6 +211,7 @@ public class Principal extends Activity {
             Uri u = pedido.getUrl();
             if (!HOST.equals(u.getHost())) return null;
             String ruta = u.getPath();
+            if (ruta != null && ruta.startsWith("/__recibidos/")) return archivoRecibido(ruta.substring(13));
             if (ruta == null || ruta.equals("/") || ruta.isEmpty()) ruta = "/index.html";
             try {
                 InputStream datos = getAssets().open("www" + ruta);
@@ -139,6 +231,18 @@ public class Principal extends Activity {
             // Los enlaces externos se abren en el navegador del teléfono
             try { startActivity(new Intent(Intent.ACTION_VIEW, u)); } catch (Exception e) { }
             return true;
+        }
+    }
+
+    /** Entrega a la página un archivo recibido (solo de la carpeta «recibidos»). */
+    WebResourceResponse archivoRecibido(String nombre) {
+        try {
+            if (nombre.contains("/") || nombre.contains("..")) throw new IOException();
+            File f = new File(new File(getCacheDir(), "recibidos"), nombre);
+            return new WebResourceResponse("application/octet-stream", null, 200, "OK",
+                    new HashMap<String, String>(), new FileInputStream(f));
+        } catch (IOException e) {
+            return new WebResourceResponse("text/plain", "UTF-8", 404, "No encontrado", new HashMap<String, String>(), null);
         }
     }
 
@@ -351,6 +455,23 @@ public class Principal extends Activity {
             runOnUiThread(new Runnable() {
                 @Override public void run() { guardarOEnviar(nombre, bytes, mime); }
             });
+        }
+
+        /** La página recoge los archivos recibidos (y la lista se vacía para no cargarlos dos veces). */
+        @JavascriptInterface
+        public String tomarRecibidos() {
+            synchronized (recibidos) {
+                String r = "[" + android.text.TextUtils.join(",", recibidos) + "]";
+                recibidos.clear();
+                return r;
+            }
+        }
+
+        /** Ya se guardaron en Finlay: se borran las copias temporales. */
+        @JavascriptInterface
+        public void limpiarRecibidos() {
+            File[] viejos = new File(getCacheDir(), "recibidos").listFiles();
+            if (viejos != null) for (File f : viejos) f.delete();
         }
 
         @JavascriptInterface

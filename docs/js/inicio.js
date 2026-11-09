@@ -41,7 +41,7 @@ const ICONOS_ASIG = [
   ["ciencia, tecnologia", "cts"], ["tecnologia y sociedad", "cts"],
   ["medicina general integral", "mgi"], ["mgi", "mgi"],
   ["introduccion a la clinica", "propedeutica"], ["farmacolog", "medicina-interna"], ["anatomia patolog", "celula"],
-  ["medicina natural", "mgi"], ["otorrino", "oftalmologia"],
+  ["medicina natural", "mgi"], ["otorrino", "otorrino"],
 ];
 export function imagenAsignatura(nombre, anio) {
   const n = sinTildes(nombre).toLowerCase();

@@ -110,6 +110,18 @@ export async function importarPaquete(datos, progreso = () => {}) {
     }
   }
 
+  // Materiales que el paquete pide quitar (solo los que vinieron en un paquete y nunca los que cargaste tú)
+  for (const q of datos.quitarMateriales || []) {
+    const id = `${Number(q.anio)}|${String(q.asignatura).trim().replace(/\|/g, "-")}`;
+    const clave = sinExtension(String(q.nombre));
+    for (const d of todos.filter((x) => x.origen === "paquete" && sinExtension(x.nombre) === clave && x.asignaturas.includes(id))) {
+      if (d.leccion || d.cuestionario?.length || d.diapositivas || d.pdf) continue; // tiene clase, preguntas o diapositivas: se queda
+      await db.borrarDocumento(d.id);
+      todos.splice(todos.indexOf(d), 1);
+      resultado.materialesQuitados = (resultado.materialesQuitados || 0) + 1;
+    }
+  }
+
   // Resúmenes de asignatura (mapa conceptual, cuadros y lo esencial de cada tema)
   for (const r of datos.resumenesAsignatura || []) {
     const asig = await db.crearAsignatura(Number(r.anio), String(r.asignatura).trim());
@@ -128,6 +140,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
       if (!doc.asignaturas.includes(asig.id)) doc.asignaturas.push(asig.id);
       if (m.resumen) doc.resumen = m.resumen;
       if (m.leccion) doc.leccion = m.leccion;
+      if (Number.isFinite(m.orden)) doc.orden = m.orden;
       if (m.cuestionario) {
         // Si cambian las preguntas, el progreso anterior ya no corresponde
         if (JSON.stringify(doc.cuestionario) !== JSON.stringify(m.cuestionario)) await db.borrarRespuestas(doc.id);
@@ -158,6 +171,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
         resumen: m.resumen || null,
         cuestionario: m.cuestionario || null,
         leccion: m.leccion || null,
+        ...(Number.isFinite(m.orden) ? { orden: m.orden } : {}),
         origen: "paquete",
       };
       await db.guardarDocumento(doc, fragmentos);
