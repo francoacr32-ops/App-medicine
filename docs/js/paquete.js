@@ -115,7 +115,8 @@ export async function importarPaquete(datos, progreso = () => {}) {
     const id = `${Number(q.anio)}|${String(q.asignatura).trim().replace(/\|/g, "-")}`;
     const clave = sinExtension(String(q.nombre));
     for (const d of todos.filter((x) => x.origen === "paquete" && sinExtension(x.nombre) === clave && x.asignaturas.includes(id))) {
-      if (d.leccion || d.cuestionario?.length || d.diapositivas || d.pdf) continue; // tiene clase, preguntas o diapositivas: se queda
+      // Si tiene una clase de Finlay se queda; si tiene preguntas o diapositivas, solo se quita cuando el paquete lo pide expresamente
+      if (d.leccion || (!q.forzar && (d.cuestionario?.length || d.diapositivas || d.pdf))) continue;
       await db.borrarDocumento(d.id);
       todos.splice(todos.indexOf(d), 1);
       resultado.materialesQuitados = (resultado.materialesQuitados || 0) + 1;

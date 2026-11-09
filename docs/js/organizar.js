@@ -46,7 +46,19 @@ export const LIBROS = [
   { titulo: "Medicina General Integral", autor: "Álvarez Sintes", pistas: ["alvarez sintes"], asigs: ["medicina general integral", "comunidad"] },
   { titulo: "Fundamentos de Salud Pública", autor: "Toledo Curbelo", pistas: ["toledo curbelo", "fundamentos de salud publica"], asigs: ["salud publica"], porConfirmar: true },
   { titulo: "Lecturas de Filosofía, Salud y Sociedad", autor: "Colectivo de autores", pistas: ["filosofia, salud y sociedad", "filosofia salud y sociedad"], asigs: ["tecnologia"], porConfirmar: true },
+  { titulo: "Farmacología General", autor: "Morón Rodríguez y Levy Rodríguez", pistas: ["moron rodriguez", "farmacologia general"], asigs: ["farmacolog"], porConfirmar: true },
+  { titulo: "Anatomía Patológica", autor: "Colectivo de autores", pistas: ["anatomia patologica"], asigs: ["anatomia patolog"], porConfirmar: true },
+  { titulo: "Otorrinolaringología", autor: "Colectivo de autores", pistas: ["otorrinolaringologia"], asigs: ["otorrino"], porConfirmar: true },
+  { titulo: "Medicina Natural y Tradicional", autor: "Colectivo de autores", pistas: ["medicina natural y tradicional"], asigs: ["medicina natural"], porConfirmar: true },
 ];
+
+/** Catálogo de la Editorial Ciencias Médicas (ECIMED): allí se descargan los libros (se necesita internet) */
+export const ECIMED_CATALOGO = "https://omp.sld.cu/index.php/ecimed/catalog";
+/** Enlace que busca el libro en el catálogo de ECIMED */
+export function enlaceEcimed(libro) {
+  const titulo = String(libro.titulo).replace(/\s*\(.*?\)\s*/g, " ").trim();
+  return `${ECIMED_CATALOGO}/search?query=${encodeURIComponent(titulo)}`;
+}
 /** Libros de texto de una asignatura (por su nombre) */
 export function librosDe(nombreAsignatura) {
   const n = sinTildes(nombreAsignatura);
