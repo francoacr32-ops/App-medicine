@@ -408,6 +408,7 @@ async function vistaTemas(filtro) {
       <input name="q" type="search" placeholder="Buscar temas…" autocomplete="off" required>
     </form>
     <nav class="filtros filtros-iconos" aria-label="Filtrar por año">${chips}</nav>
+    ${filtro !== "todas" ? await botonExamenFinal(Number(filtro)) : ""}
     ${lista || `<p class="vacio">Todavía no hay asignaturas en este año.</p>`}
     <button class="btn ancho solo-manual" data-accion="paquete">${ico("cargar")} Cargar paquete de Claude</button>`, null, { sinBarra: true });
   document.querySelector(".chip-filtro.activo")?.scrollIntoView({ inline: "center", block: "nearest" });
@@ -826,7 +827,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 3.5 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 3.6 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -932,6 +933,21 @@ function selectorSemestre(nombre, valor, id = "") {
 
 const leerSemestre = (v) => (v === "" ? null : Number(v));
 
+/** Tarjeta para el examen final de un año: 50 preguntas repartidas entre sus asignaturas, con reloj y sin corregir al momento */
+async function botonExamenFinal(anio) {
+  const asigs = await db.listarAsignaturas(anio);
+  const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length && d.asignaturas.some((id) => asigs.some((a) => a.id === id)));
+  const preguntas = docs.reduce((s, d) => s + d.cuestionario.filter((p) => p.tipo !== "abierta").length, 0);
+  if (preguntas < 20) return "";
+  const n = Math.min(50, preguntas);
+  const conPreguntas = asigs.filter((a) => docs.some((d) => d.asignaturas.includes(a.id))).length;
+  return `<a class="tarjeta examen-final" href="#/examen-hacer/${encodeURIComponent("anio:" + anio)}?n=${n}&reloj=1&momento=0">
+    <span class="examen-final-ico">🎓</span>
+    <span class="examen-final-cuerpo"><b>Examen final de ${esc(ANIOS[anio - 1])}</b>
+      <span class="sub">${n} preguntas de ${conPreguntas} asignatura${conPreguntas === 1 ? "" : "s"} · ${Math.round((n * 90) / 60)} minutos · nota por asignatura</span></span>
+    ${ico("chevron", "flecha-der")}</a>`;
+}
+
 async function vistaAnio(anio) {
   const asigs = await db.listarAsignaturas(anio);
   const tarjeta = async (a) => {
@@ -954,7 +970,7 @@ async function vistaAnio(anio) {
   }
   poner(
     ANIOS[anio - 1],
-    `${secciones || `<p class="vacio">Todavía no hay asignaturas en ${ANIOS[anio - 1]}.</p>`}
+    `${await botonExamenFinal(anio)}${secciones || `<p class="vacio">Todavía no hay asignaturas en ${ANIOS[anio - 1]}.</p>`}
      <h2 class="solo-manual">Añadir asignatura</h2>
      <form class="nueva-asig solo-manual" data-anio="${anio}">
        <input name="nombre" placeholder="Nombre (ej. Morfofisiología)" required maxlength="80">
@@ -1752,6 +1768,7 @@ async function entregarExamen() {
   $app.classList.remove("modo-examen");
   let puntos = 0;
   const fallados = new Map();
+  const porAsignatura = new Map(); // asignatura → { puntos, total }
   for (const [k, { doc, i }] of enPantalla.entries()) {
     const p = doc.cuestionario[i];
     const tarjeta = document.getElementById("p" + k);
@@ -1776,6 +1793,11 @@ async function entregarExamen() {
       }
     }
     puntos += r.aciertos / r.total;
+    const asig = doc.asignaturas?.[0] ?? "";
+    const pa = porAsignatura.get(asig) || { puntos: 0, total: 0 };
+    pa.puntos += r.aciertos / r.total;
+    pa.total++;
+    porAsignatura.set(asig, pa);
     if (!resultadosExamen.has(k) || p.tipo === "abierta") mostrarCorreccion(k, r, sinResponder);
     await db.guardarRespuesta(doc.id, i, r.correcta);
     if (!r.correcta) fallados.set(doc.id, { doc, n: (fallados.get(doc.id)?.n || 0) + 1 });
@@ -1786,12 +1808,23 @@ async function entregarExamen() {
   const bienExamen = enPantalla.filter((_, k) => document.querySelector(`#p${k} .explicacion.es-correcta`)).length;
   juego.respuestasDeExamen(bienExamen, n.nota);
   await db.guardarExamen({ fecha: Date.now(), titulo, ambito, cantidad: lista.length, porcentaje, nota: n.nota });
+  let tablaAsignaturas = "";
+  if (porAsignatura.size > 1) {
+    const nombres = new Map((await db.listarAsignaturas()).map((a) => [a.id, a.nombre]));
+    tablaAsignaturas = `<p><b>Nota por asignatura:</b></p><table class="tabla-asignaturas"><tbody>${[...porAsignatura.entries()]
+      .map(([id, x]) => ({ id, pct: Math.round((x.puntos / x.total) * 100), ...x }))
+      .sort((a, b) => a.pct - b.pct)
+      .map((x) => `<tr><td>${esc(nombres.get(x.id) || "Otros")}</td><td>${x.puntos.toFixed(1).replace(".0", "")}/${x.total}</td>
+        <td><b class="nota-num n${nota(x.pct).nota}">${nota(x.pct).nota}</b></td></tr>`)
+      .join("")}</tbody></table><p class="sub">Las de arriba son las que más necesitas repasar.</p>`;
+  }
   document.querySelector("[data-accion=entregar]")?.remove();
   document.getElementById("reloj").textContent = `Nota: ${n.nota}`;
   document.getElementById("resultado-examen").innerHTML = `<div class="panel centro">
       <p class="nota-grande n${n.nota}">${n.nota}</p>
       <p class="grande">${n.texto}</p>
       <p>${porcentaje} % de respuestas correctas (${puntos.toFixed(1).replace(".0", "")} de ${lista.length}).</p>
+      ${tablaAsignaturas}
       ${fallados.size ? `<p><b>Temas para repasar:</b></p><ul class="lista-temas">${[...fallados.values()]
         .sort((a, b) => b.n - a.n)
         .map(({ doc, n }) => `<li><a href="#/doc/${doc.id}/resumen">${esc(doc.nombre)}</a> — ${n} fallo${n > 1 ? "s" : ""}</li>`)

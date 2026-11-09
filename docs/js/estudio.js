@@ -67,10 +67,28 @@ export function barajar(lista, azar = Math.random) {
 }
 
 /** Preguntas al azar para el examen (sin las de autoevaluación). */
-export function preguntasDeExamen(docs, cantidad) {
-  const todas = [];
-  for (const d of docs) (d.cuestionario || []).forEach((p, i) => p.tipo !== "abierta" && todas.push({ doc: d, i }));
-  return barajar(todas).slice(0, cantidad);
+export function preguntasDeExamen(docs, cantidad, azar = Math.random) {
+  // Se reparten por igual entre las asignaturas (y dentro de cada una, entre sus materiales),
+  // para que una asignatura con muchas preguntas no se coma todo el examen.
+  const grupos = new Map();
+  for (const d of docs) {
+    const preguntas = (d.cuestionario || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== "abierta").map(({ i }) => ({ doc: d, i }));
+    if (!preguntas.length) continue;
+    const asig = d.asignaturas?.[0] ?? "";
+    if (!grupos.has(asig)) grupos.set(asig, []);
+    grupos.get(asig).push(barajar(preguntas, azar));
+  }
+  // Cada asignatura: sus materiales en orden aleatorio, tomando una pregunta de cada uno por vuelta
+  const colas = barajar([...grupos.values()], azar).map((materiales) => alternar(barajar(materiales, azar)));
+  return barajar(alternar(colas).slice(0, cantidad), azar);
+}
+
+/** Toma un elemento de cada lista por vuelta hasta vaciarlas: [[a,b],[c]] → [a,c,b] */
+function alternar(listas) {
+  const salida = [];
+  const largo = Math.max(0, ...listas.map((l) => l.length));
+  for (let k = 0; k < largo; k++) for (const l of listas) if (k < l.length) salida.push(l[k]);
+  return salida;
 }
 
 /** Escala de evaluación de la educación superior cubana. */
