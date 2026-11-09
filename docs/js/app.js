@@ -2,6 +2,7 @@
 
 import * as db from "./db.js";
 import { extraerTexto, tipoDeArchivo, FORMATOS, cargarJSZip } from "./extraer.js";
+import { tipoOriginal, pintarOriginal, zoomOriginal } from "./original.js";
 import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
@@ -831,7 +832,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 3.7 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 3.8 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1235,6 +1236,16 @@ async function vistaDoc(docId, pestana, irA = 0) {
               <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar la ${palabra.toLowerCase()} ${n}">${ico("voz")}</button></span></figcaption>
           ${misNotas[n]?.t ? `<div class="diapo-nota">✏️ ${esc(misNotas[n].t).replace(/\n/g, "<br>")}</div>` : ""}
         </figure>`).join("")}</div>`;
+  } else if (doc.original) {
+    // Word o PowerPoint con su formato original (se dibuja al abrir), con zoom
+    cuerpo = `<div class="original-barra">
+        <button class="btn-icono" data-zoom="menos" aria-label="Alejar">−</button>
+        <span class="original-pct" data-zoom="pct">100 %</span>
+        <button class="btn-icono" data-zoom="mas" aria-label="Acercar">＋</button>
+        <button class="btn mini secundario" data-zoom="ajustar">Ajustar</button>
+        ${doc.paginas ? `<a class="btn mini secundario" href="#/leer/${doc.id}">Solo texto</a>` : ""}</div>
+      <p class="sub diapo-info">${doc.original === "pptx" ? "PowerPoint" : "Word"} con su formato original · acerca y aleja con dos dedos o con ＋ y −</p>
+      <div class="original-marco"><div class="original-hoja ${doc.original}"><p class="centro sub">Preparando el documento…</p></div></div>`;
   } else if (doc.paginas) {
     // Sin imagen (Word o PowerPoint cargado desde el teléfono): el texto de cada página en una tarjeta
     const frags = await db.fragmentosDe(doc.id);
@@ -1244,7 +1255,10 @@ async function vistaDoc(docId, pestana, irA = 0) {
           <p>Carga el paquete <b>.zip</b> de ${esc(doc.asignaturas[0].split("|").slice(1).join("|"))} que te mandó Claude.
           Así se ve igual que el PDF. No pierdes tu progreso.</p>
           <button class="btn ancho" data-accion="paquete">${ico("cargar")} Cargar paquete .zip</button></div>`
-      : `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
+      : tipoOriginal(doc.archivo)
+        ? `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
+          <p>Vuelve a compartirla desde WhatsApp (o cárgala otra vez en <b>Añadir materiales</b>): Finlay ahora guarda el Word y el PowerPoint tal cual. No pierdes tu progreso.</p></div>`
+        : `<div class="no-encontrado consejo"><b>Para verla con su formato original</b>
           <p>Ábrela en WPS u Office, elige <b>Exportar a PDF</b> y carga el PDF en Finlay.</p></div>`;
     cuerpo = `${aviso}
       <div class="diapos">${(await Promise.all(paginas.map(async (n) => `
@@ -1267,10 +1281,30 @@ async function vistaDoc(docId, pestana, irA = 0) {
   vistaDoc.doc = doc;
   if (pestana === "cuestionario") iniciarSesion(false);
   else if (tieneVisual(doc)) activarCarga($app, doc);
+  else if (doc.original && pestana === "conferencia") montarOriginal(doc);
   // Vuelve a la diapositiva donde se quedó (si no se pidió otra)
   if (!irA && pestana === "conferencia") irA = Number(pref("pos-" + docId)) || 0;
   if (irA > 1) document.getElementById("d" + irA)?.scrollIntoView({ block: "start" });
   actualizarAvance();
+}
+
+/** Dibuja el Word o PowerPoint guardado y le pone el zoom; si falla, ofrece el texto */
+async function montarOriginal(doc) {
+  const marco = $app.querySelector(".original-marco");
+  const hoja = marco?.querySelector(".original-hoja");
+  if (!hoja) return;
+  try {
+    const blob = await db.obtenerArchivo(doc.id);
+    if (!blob) throw new Error("No se encontró el archivo original.");
+    const ancho = await pintarOriginal(hoja, blob, doc.original);
+    if (!hoja.isConnected) return; // se cambió de pantalla mientras se dibujaba
+    const b = (n) => $app.querySelector(`[data-zoom="${n}"]`);
+    zoomOriginal(marco, hoja, { mas: b("mas"), menos: b("menos"), ajustar: b("ajustar"), pct: b("pct") }, ancho);
+  } catch (e) {
+    console.error(e);
+    if (hoja.isConnected) hoja.innerHTML = `<div class="no-encontrado"><b>No se pudo mostrar con el formato original</b><p>${esc(e.message)}</p>
+      ${doc.paginas ? `<a class="btn" href="#/leer/${doc.id}">Ver el texto</a>` : ""}</div>`;
+  }
 }
 
 /** Tono corto al responder: dos notas que suben si aciertas, una grave si fallas */
@@ -2298,8 +2332,11 @@ async function guardarMaterial(archivo, paginas, asigId, tipo, nombre = archivo.
     paginas: paginas.length, primera: conTexto[0]?.n ?? 1, pdf: esPdf, etiqueta: paginas[0]?.etiqueta || "pág.",
     sinTexto: paginas.length - conTexto.length, fecha: Date.now(), origen: "telefono",
   };
+  // Word y PowerPoint: se guarda también el archivo tal cual, para verlo con su formato original
+  const original = tipoOriginal(archivo.name);
+  if (original) doc.original = original;
   await db.guardarDocumento(doc, fragmentos);
-  if (esPdf) await db.guardarArchivo(doc.id, archivo);
+  if (esPdf || original) await db.guardarArchivo(doc.id, archivo);
   if (!conTexto.length) return `${nombre}: es un PDF escaneado (fotos). Se puede ver, pero el buscador y las tarjetas no funcionan con él.`;
   if (doc.sinTexto > paginas.length * 0.3) return `${nombre}: ${doc.sinTexto} de ${paginas.length} páginas no tienen texto (pueden ser escaneadas).`;
   return "";
@@ -2315,7 +2352,16 @@ async function anadirMateriales(archivos) {
     const fila = { archivo, nombre: organizar.nombreLimpio(archivo.name) };
     try {
       if (!tipoDeArchivo(archivo.name)) throw new Error("Formato no compatible (usa PDF, PowerPoint o Word).");
-      if (existentes.some((d) => (d.archivo || d.nombre) === archivo.name && d.tamano === archivo.size)) throw new Error("Ya está en Finlay.");
+      const yaEsta = existentes.find((d) => (d.archivo || d.nombre) === archivo.name && d.tamano === archivo.size);
+      if (yaEsta && !yaEsta.original && tipoOriginal(archivo.name)) {
+        // Ya estaba solo como texto: ahora se guarda también con su formato original
+        await db.guardarArchivo(yaEsta.id, archivo);
+        yaEsta.original = tipoOriginal(archivo.name);
+        await db.actualizarDocumento(yaEsta);
+        aviso(`✅ ${yaEsta.nombre}: ahora se ve con su formato original`);
+        continue;
+      }
+      if (yaEsta) throw new Error("Ya está en Finlay.");
       mostrarProgreso(`Leyendo ${archivo.name}…`);
       fila.paginas = await extraerTexto(archivo, (t) => mostrarProgreso(`${archivo.name}\n${t}`));
       const texto = fila.paginas.slice(0, 12).map((p) => p.texto).join("\n");
@@ -2327,6 +2373,7 @@ async function anadirMateriales(archivos) {
     leidos.push(fila);
   }
   mostrarProgreso(null);
+  if (!leidos.length) return router(); // solo eran conferencias que ya estaban: se les puso el formato original
   const elegidos = await confirmarOrganizacion(leidos, asigs);
   if (!elegidos) return;
   const avisos = [];
