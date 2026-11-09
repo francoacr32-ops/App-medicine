@@ -142,8 +142,12 @@ export async function importarPaquete(datos, progreso = () => {}) {
       if (m.leccion) doc.leccion = m.leccion;
       if (Number.isFinite(m.orden)) doc.orden = m.orden;
       if (m.cuestionario) {
-        // Si cambian las preguntas, el progreso anterior ya no corresponde
-        if (JSON.stringify(doc.cuestionario) !== JSON.stringify(m.cuestionario)) await db.borrarRespuestas(doc.id);
+        // Si cambian las preguntas, el progreso anterior ya no corresponde.
+        // Pero si solo se añadieron preguntas nuevas al final, lo ya respondido se conserva.
+        const viejas = doc.cuestionario || [];
+        const soloAnadidas = viejas.length <= m.cuestionario.length &&
+          JSON.stringify(viejas) === JSON.stringify(m.cuestionario.slice(0, viejas.length));
+        if (!soloAnadidas) await db.borrarRespuestas(doc.id);
         doc.cuestionario = m.cuestionario;
       }
       await db.actualizarDocumento(doc);

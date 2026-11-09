@@ -232,3 +232,44 @@ export function errorEnPregunta(p) {
       return p.respuesta ? null : "falta la respuesta";
   }
 }
+
+// ---------- Que no salga siempre igual ----------
+function barajarIndices(n) {
+  const a = Array.from({ length: n }, (_, k) => k);
+  for (let k = n - 1; k > 0; k--) {
+    const j = Math.floor(Math.random() * (k + 1));
+    [a[k], a[j]] = [a[j], a[k]];
+  }
+  return a;
+}
+
+/**
+ * Copia de la pregunta con las opciones en otro orden (selección, marcar, enlazar y V/F de varias afirmaciones).
+ * La respuesta correcta y las explicaciones por opción se reordenan igual, así la corrección no cambia.
+ */
+export function mezclarPregunta(p) {
+  if (!p) return p;
+  if ((p.tipo === "multiple" || p.tipo === "marcar") && Array.isArray(p.opciones) && p.opciones.length > 1) {
+    const orden = barajarIndices(p.opciones.length); // orden[nuevo] = viejo
+    const nuevoDe = new Map(orden.map((viejo, nuevo) => [viejo, nuevo]));
+    const q = { ...p, opciones: orden.map((v) => p.opciones[v]) };
+    if (Array.isArray(p.porque)) q.porque = orden.map((v) => p.porque[v]);
+    if (p.tipo === "multiple") q.correcta = nuevoDe.get(p.correcta);
+    else q.correctas = (p.correctas || []).map((v) => nuevoDe.get(v)).sort((a, b) => a - b);
+    return q;
+  }
+  if (p.tipo === "enlazar" && Array.isArray(p.columnaB) && p.columnaB.length > 1) {
+    const orden = barajarIndices(p.columnaB.length);
+    const nuevoDe = new Map(orden.map((viejo, nuevo) => [viejo, nuevo]));
+    return { ...p, columnaB: orden.map((v) => p.columnaB[v]), pares: p.pares.map((v) => nuevoDe.get(v)) };
+  }
+  if (p.tipo === "vf" && Array.isArray(p.afirmaciones) && p.afirmaciones.length > 1) {
+    return { ...p, afirmaciones: barajarIndices(p.afirmaciones.length).map((v) => p.afirmaciones[v]) };
+  }
+  return p;
+}
+
+/** Copia del documento con las opciones de todas sus preguntas mezcladas (el original no se toca). */
+export function mezclarDocumento(doc) {
+  return doc?.cuestionario?.length ? { ...doc, cuestionario: doc.cuestionario.map(mezclarPregunta) } : doc;
+}

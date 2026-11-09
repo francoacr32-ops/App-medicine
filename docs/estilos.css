@@ -1478,3 +1478,16 @@ html, body { overflow-x: clip; }
 @keyframes arranque-ecg { to { stroke-dashoffset: -260; } }
 .arranque-texto { margin: 10px 0 0; color: var(--suave); font-size: .9rem; }
 @media (prefers-reduced-motion: reduce) { .arranque-logo, .arranque-ecg path, .progreso-doctor { animation: none; } .arranque-ecg path { stroke-dashoffset: 0; } }
+
+/* Botón del Dr. Finlay: explica la pantalla en que estás */
+.doctor-boton { position: fixed; right: 14px; bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 24; width: 56px; height: 56px; padding: 0;
+  border-radius: 50%; border: 2px solid var(--acento); background: var(--tarjeta); box-shadow: var(--sombra); overflow: visible; cursor: pointer; }
+.doctor-boton img { position: absolute; left: 50%; bottom: 2px; width: 46px; height: 60px; object-fit: cover; object-position: top; transform: translateX(-50%);
+  clip-path: inset(0 0 0 0 round 0 0 22px 22px); }
+.doctor-boton span { position: absolute; right: -4px; top: -4px; width: 20px; height: 20px; border-radius: 50%; background: var(--acento); color: var(--acento-texto);
+  font-weight: 800; font-size: .8rem; line-height: 20px; text-align: center; }
+.modo-examen ~ .doctor-boton, body:has(.modo-examen) .doctor-boton { display: none; }
+.consejo-texto p { margin: 0 0 8px; font-size: .92rem; line-height: 1.45; }
+.consejo-texto ul { margin: 0 0 10px; padding-left: 18px; font-size: .9rem; line-height: 1.45; }
+.consejo-texto li { margin-bottom: 4px; }
+.consejo-globo { max-height: 70vh; overflow-y: auto; }

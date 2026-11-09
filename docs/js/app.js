@@ -7,7 +7,7 @@ import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
-import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata } from "./cuestionario.js";
+import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata, mezclarDocumento } from "./cuestionario.js";
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
@@ -855,7 +855,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 3.9 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.0 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1213,12 +1213,14 @@ async function vistaLeer(docId, pagina, q) {
 // ---------- Pantalla: un documento (resumen, cuestionario y texto completo) ----------
 
 async function vistaDoc(docId, pestana, irA = 0) {
-  const doc = await db.obtenerDocumento(docId);
+  let doc = await db.obtenerDocumento(docId);
+  if (pestana === "cuestionario") doc = mezclarDocumento(doc); // opciones en otro orden cada vez
   if (!doc) return (location.hash = "#/");
   guardarPref("ultimo", docId);
   if (!["cuestionario", "clase"].includes(pestana)) pestana = pestana === "conferencia" || !doc.leccion ? "conferencia" : "clase";
   if (pestana === "clase" && !doc.leccion) pestana = "conferencia";
   if (pestana === "conferencia" && doc.leccion && !tieneVisual(doc)) pestana = "clase";
+  vistaDoc.pestanaActual = pestana;
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
   const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "consulta" ? "Consulta" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
@@ -1652,9 +1654,10 @@ async function htmlCuestionario(doc) {
   enPantalla = doc.cuestionario.map((_, i) => ({ doc, i }));
   const resp = new Map((await db.respuestasDe(doc.id)).map((r) => [r.indice, r]));
   const filtro = vistaDoc.filtro || "todas";
-  const visibles = doc.cuestionario
-    .map((p, i) => ({ p, i }))
-    .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro));
+  const grupo = (i) => (!resp.has(i) ? 0 : resp.get(i).ultima === false ? 1 : 2); // no vistas, falladas, acertadas
+  const visibles = barajar(doc.cuestionario.map((p, i) => ({ p, i })))
+    .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro))
+    .sort((a, b) => grupo(a.i) - grupo(b.i));
   const tipos = new Set(doc.cuestionario.map((p) => p.tipo));
   const chips = [["todas", "Todas"], ...Object.entries(NOMBRE_TIPO).filter(([k]) => tipos.has(k)), ["falladas", "❗ Las que fallé"]]
     .map(([k, t]) => `<button class="chip ${filtro === k ? "activa" : ""}" data-accion="filtro" data-filtro="${k}">${t}</button>`)
@@ -1683,7 +1686,7 @@ async function vistaRepaso() {
   modo = "normal";
   const docs = (await db.listarDocumentos()).filter((d) => d.cuestionario?.length);
   const respuestas = await db.todasLasRespuestas();
-  const { lista } = preguntasDelRepaso(docs, respuestas, metaDiaria());
+  const { lista } = preguntasDelRepaso(docs.map(mezclarDocumento), respuestas, metaDiaria());
   enPantalla = lista;
   if (!lista.length) {
     return poner(
@@ -1777,7 +1780,7 @@ async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   vistaExamen.puntosInicio = juego.estado().puntos;
   vistaExamen.alMomento = alMomento;
   resultadosExamen.clear();
-  const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length);
+  const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length).map(mezclarDocumento);
   // En un reto, el orden sale del código: los dos teléfonos eligen las mismas preguntas
   const lista = vistaExamen.reto ? preguntasDelReto(docs, cantidad, vistaExamen.reto) : preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
@@ -2315,6 +2318,128 @@ const GUIA = [
   { pose: "victoria", titulo: "¡Listo, a estudiar!", texto: "Eso es todo. Puedes volver a esta guía cuando quieras desde el <b>Perfil → Ayuda</b>. ¡Mucho éxito en la carrera, futuro doctor!", ir: ["#/temas", "Empezar a estudiar"] },
 ];
 
+/** Globo del Dr. Finlay: { pose, etiqueta, titulo, texto (HTML), ir: [href, texto], pie } */
+function mostrarDoctor({ pose = "saluda", etiqueta = "", titulo = "", texto = "", ir = null, pie = true }) {
+  document.querySelector(".consejo-doctor")?.remove();
+  const caja = document.createElement("div");
+  caja.className = "consejo-doctor";
+  caja.setAttribute("role", "dialog");
+  caja.innerHTML = `<div class="consejo-caja">
+      <img class="consejo-img" src="iconos/doctor/${pose}.webp" alt="El Dr. Finlay">
+      <div class="consejo-globo">${etiqueta ? `<span class="guia-paso">${etiqueta}</span>` : ""}
+        <h3>${esc(titulo)}</h3><div class="consejo-texto">${texto}</div>
+        <div class="consejo-botones">
+          ${ir ? `<a class="btn mini" href="${ir[0]}" data-consejo="cerrar">${esc(ir[1])}</a>` : ""}
+          <button class="btn mini secundario" data-consejo="cerrar">Entendido</button></div>
+        ${pie ? `<button class="consejo-no" data-consejo="nunca">No mostrar más explicaciones</button>` : ""}</div></div>`;
+  document.body.appendChild(caja);
+  caja.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-consejo]");
+    if (!b && ev.target !== caja) return;
+    if (b?.dataset.consejo === "nunca") { guardarPref("consejos", "0"); aviso("Listo. Siempre puedes tocar al Dr. Finlay (abajo a la derecha) para que te explique."); }
+    caja.classList.add("saliendo");
+    setTimeout(() => caja.remove(), 200);
+  });
+}
+
+/** Lo que el Dr. Finlay explica en cada parte de la app */
+const AYUDA_PANTALLA = {
+  inicio: { pose: "saluda", titulo: "Tu Inicio", texto: `<p>Aquí ves de un vistazo cómo vas:</p><ul>
+    <li><b>Tu progreso</b> de hoy (o de todo el tiempo) y tu <b>racha 🔥</b>.</li>
+    <li><b>Continuar estudiando</b> te lleva a donde te quedaste.</li>
+    <li><b>Hoy en tu plan</b>: el repaso del día y tu próximo examen.</li>
+    <li>Abajo, <b>tus asignaturas</b>.</li></ul>` },
+  temas: { pose: "mochila", titulo: "Temas: tu carrera", texto: `<ul>
+    <li>Toca un <b>año</b> arriba para ver sus asignaturas.</li>
+    <li>Con un año elegido aparece el <b>🎓 Examen final</b> de ese año.</li>
+    <li>La <b>lupa</b> busca en toda la carrera.</li>
+    <li>Toca una asignatura para ver sus clases.</li></ul>` },
+  anio: { pose: "carpeta", titulo: "Tu año, por semestres", texto: `<p>Aquí están las asignaturas del año ordenadas por <b>semestre</b>, con cuántas conferencias y preguntas tiene cada una.</p>
+    <p>Arriba tienes el <b>🎓 Examen final del año</b>: 50 preguntas repartidas entre todas las asignaturas y nota por asignatura.</p>` },
+  asig: { pose: "lee", titulo: "La asignatura", texto: `<ul>
+    <li><b>Conferencias</b>: las clases <b>numeradas 1, 2, 3…</b> en el orden en que se estudian.</li>
+    <li><b>Resumen</b>: el mapa general y lo que siempre debes recordar.</li>
+    <li><b>Progreso</b>: qué temas dominas y cuáles repasar.</li>
+    <li>El botón <b>📝 Examen de esta asignatura</b> te pone a prueba.</li></ul>` },
+  "doc-clase": { pose: "lee", titulo: "Una clase de Finlay", texto: `<ul>
+    <li>Empieza con la <b>motivación</b> y los <b>objetivos</b>; luego viene la explicación <b>por partes</b>, con tablas y esquemas.</li>
+    <li>Las <b>pausas</b> te hacen pensar antes de seguir; los <b>casos clínicos</b> llevan la teoría a la consulta.</li>
+    <li>Al final, la <b>síntesis</b> con su mapa conceptual. En anatomía, los <b>5 detalles anatómicos</b> clave.</li>
+    <li>Pasa a <b>Cuestionario</b> para comprobar lo que aprendiste.</li></ul>` },
+  "doc-conferencia": { pose: "lee", titulo: "La conferencia", texto: `<ul>
+    <li>Se ve con su <b>formato original</b>, diapositiva por diapositiva. Toca una para ampliarla.</li>
+    <li>Con ☆ <b>marcas</b> las importantes, con ✏️ escribes una <b>nota</b> y con 🔊 la <b>escuchas</b>.</li>
+    <li>La barra de arriba muestra tu <b>avance</b>; la app recuerda dónde te quedaste.</li>
+    <li>En Word y PowerPoint puedes acercar y alejar con <b>dos dedos</b> o con ＋ y −.</li></ul>` },
+  "doc-cuestionario": { pose: "piensa", titulo: "El cuestionario", texto: `<ul>
+    <li>Una pregunta por pantalla. Responde y toca <b>Siguiente</b>.</li>
+    <li>Las preguntas y las opciones <b>cambian de orden</b> cada vez, y salen primero las que no has visto y las que fallaste.</li>
+    <li>Si fallas, te explico <b>por qué</b> y <b>📖 Ver dónde está</b> te lleva a la parte exacta de la clase.</li>
+    <li>Arriba puedes filtrar por tipo o ver solo <b>las que fallaste</b>.</li></ul>` },
+  biblioteca: { pose: "libros", titulo: "La Biblioteca", texto: `<ul>
+    <li>Todas tus clases y conferencias juntas. El botón ⚙ del buscador <b>filtra por asignatura</b> y <b>ordena</b>.</li>
+    <li>Arriba eliges <b>Conferencias</b>, <b>Clases</b>, <b>Favoritos ❤</b> o el <b>Atlas</b> de imágenes.</li>
+    <li><b>Añadir materiales</b> carga tus PDF, Word o PowerPoint y los organiza solo.</li>
+    <li>También puedes compartir desde <b>WhatsApp → Finlay</b>.</li></ul>` },
+  atlas: { pose: "corazon", titulo: "El Atlas", texto: `<p>Aquí se juntan todas las <b>imágenes</b> de tus materiales: láminas, esquemas y cortes. Toca una para <b>ampliarla</b> y ver de qué clase viene.</p>` },
+  evaluaciones: { pose: "carpeta", titulo: "Evaluaciones", texto: `<ul>
+    <li><b>Repaso del día</b>: lo que fallas vuelve hasta que lo domines.</li>
+    <li><b>Examen de práctica</b>: con reloj y nota de 2 a 5, de una asignatura, un año o toda la carrera.</li>
+    <li><b>Reto con un compañero</b>: el mismo examen para los dos, con un código.</li>
+    <li><b>Plan para el examen</b>: pon la fecha y te reparto los temas por días.</li></ul>` },
+  repaso: { pose: "idea", titulo: "Repaso del día", texto: `<p>Te pregunto lo que te toca repasar hoy. Cada acierto <b>aleja</b> esa pregunta en el tiempo; cada fallo la <b>trae de vuelta</b> mañana. Así lo aprendes para siempre, no solo para el examen.</p>` },
+  examen: { pose: "carpeta", titulo: "Modo examen", texto: `<ul>
+    <li>Elige <b>de qué</b> (asignatura, año o carrera) y <b>cuántas preguntas</b>.</li>
+    <li>Con <b>cronómetro</b> tienes minuto y medio por pregunta.</li>
+    <li>Si quitas <b>«Corregir al momento»</b>, es como el examen real: no sabes si fallaste hasta entregar.</li>
+    <li>La nota es según la escala cubana: 5, 4, 3 o 2.</li></ul>` },
+  "examen-hacer": { pose: "piensa", titulo: "¡A concentrarse!", texto: `<p>Responde todas las preguntas y toca <b>📤 Entregar examen</b>. Arriba ves cuántas llevas y el tiempo que queda.</p>
+    <p>Al entregar te doy tu <b>nota</b>, la <b>nota por asignatura</b> y los <b>temas que debes repasar</b>.</p>` },
+  planes: { pose: "carpeta", titulo: "Plan para el examen", texto: `<p>Pon la <b>fecha</b> de tu próxima prueba y la asignatura. Te reparto los temas en los días que faltan, <b>los más flojos primero</b>, y dejo el último día para un repaso general.</p>` },
+  plan: { pose: "carpeta", titulo: "Tu plan", texto: `<p>Cada día tiene sus temas. Márcalos cuando los estudies: el Inicio te recordará lo que toca hoy.</p>` },
+  tarjetas: { pose: "idea", titulo: "Tarjetas de memoria", texto: `<p>Lee la pregunta, piensa la respuesta y voltea la tarjeta. Dime si la sabías: las que no sabes <b>vuelven pronto</b> y las que dominas, <b>más tarde</b>. Pocos minutos al día bastan.</p>` },
+  notas: { pose: "lee", titulo: "Tus notas", texto: `<p>Aquí se juntan las <b>notas</b> y <b>marcadores ☆</b> que pusiste en las diapositivas. Toca una para volver a esa parte de la conferencia.</p>` },
+  progreso: { pose: "salta", titulo: "Mi progreso", texto: `<ul>
+    <li>Tus <b>estadísticas</b>: preguntas, aciertos, tiempo de estudio por días.</li>
+    <li>Tu <b>nivel médico</b> y tus <b>puntos</b>: de estudiante de primer año a eminencia médica.</li>
+    <li>Las <b>medallas y trofeos</b> que vas ganando.</li></ul>` },
+  perfil: { pose: "brazos", titulo: "Tu perfil", texto: `<ul>
+    <li>Tu foto, tu nivel y tus puntos.</li>
+    <li><b>Mi progreso</b>, tus <b>favoritos</b> y tus <b>notas</b>.</li>
+    <li><b>Copia de seguridad</b>: guárdala de vez en cuando por si cambias de teléfono.</li>
+    <li><b>Ayuda</b>: la guía completa conmigo.</li></ul>` },
+  ajustes: { pose: "brazos", titulo: "Configuración", texto: `<p>Cambia tu <b>nombre</b> y tu <b>foto</b>, el <b>modo oscuro</b> (o automático por la hora), el <b>sonido</b>, el <b>tamaño de letra</b>, tu <b>meta diaria</b> y la <b>voz</b>.</p>` },
+  copia: { pose: "laptop", titulo: "Copia de seguridad", texto: `<p>Guarda tu progreso, tus notas y tus materiales en un archivo. Si cambias de teléfono o borras la app, lo cargas y <b>no pierdes nada</b>. También sirve para pasarle materiales a un compañero.</p>` },
+  buscar: { pose: "lee", titulo: "El buscador", texto: `<p>Busca una palabra en todas tus clases y conferencias. Arriba filtras por <b>año</b> y tipo; toca un resultado para ir <b>justo a esa parte</b>, con la palabra marcada.</p>` },
+  leer: { pose: "lee", titulo: "Modo lectura", texto: `<p>El texto de la conferencia con letra cómoda, página por página. Usa las flechas para avanzar y 🔊 para escucharla.</p>` },
+};
+
+/** La primera vez que se entra a cada parte, el Dr. Finlay la explica; su botón queda siempre a mano */
+function doctorDePantalla(clave) {
+  const ayuda = AYUDA_PANTALLA[clave];
+  let boton = document.getElementById("doctor-boton");
+  if (!ayuda || clave === "ayuda") { boton?.remove(); return; }
+  if (!boton) {
+    boton = document.createElement("button");
+    boton.id = "doctor-boton";
+    boton.className = "doctor-boton";
+    boton.setAttribute("aria-label", "El Dr. Finlay te explica esta pantalla");
+    boton.innerHTML = `<img src="iconos/doctor/saluda.webp" alt=""><span>?</span>`;
+    document.body.appendChild(boton);
+  }
+  boton.onclick = () => mostrarDoctor({ ...ayuda, etiqueta: "👨‍⚕️ El Dr. Finlay te explica", pie: false });
+  const visto = `ayudaVista.${clave}`;
+  if (pref(visto) || pref("consejos", "1") !== "1" || !pref("guiaVista")) return;
+  const ruta = location.hash;
+  setTimeout(() => {
+    // solo si sigue en la misma pantalla y no hay otra ventana encima (preparación, celebración, otro globo)
+    if (location.hash !== ruta) return;
+    if (document.querySelector(".consejo-doctor, .celebracion, .hoja-organizar") || !document.getElementById("progreso").hidden) return;
+    guardarPref(visto, "1");
+    mostrarDoctor({ ...ayuda, etiqueta: "👨‍⚕️ El Dr. Finlay te explica" });
+  }, 700);
+}
+
 /** Cada vez que se abre la app, el Dr. Finlay explica una función (una distinta cada vez, en orden) */
 function consejoDelDia() {
   if (!pref("guiaVista") || pref("consejos", "1") !== "1" || document.querySelector(".consejo-doctor")) return;
@@ -2326,25 +2451,7 @@ function consejoDelDia() {
   const k = Number(pref("consejoN", "0")) % pasos.length;
   guardarPref("consejoN", String(k + 1));
   const p = pasos[k];
-  const caja = document.createElement("div");
-  caja.className = "consejo-doctor";
-  caja.setAttribute("role", "dialog");
-  caja.innerHTML = `<div class="consejo-caja">
-      <img class="consejo-img" src="iconos/doctor/${p.pose}.webp" alt="El Dr. Finlay">
-      <div class="consejo-globo"><span class="guia-paso">💡 Consejo del Dr. Finlay · ${k + 1} de ${pasos.length}</span>
-        <h3>${esc(p.titulo)}</h3><p>${p.texto}</p>
-        <div class="consejo-botones">
-          ${p.ir ? `<a class="btn mini" href="${p.ir[0]}" data-consejo="cerrar">${esc(p.ir[1])}</a>` : ""}
-          <button class="btn mini secundario" data-consejo="cerrar">Entendido</button></div>
-        <button class="consejo-no" data-consejo="nunca">No mostrar más consejos</button></div></div>`;
-  document.body.appendChild(caja);
-  caja.addEventListener("click", (ev) => {
-    const b = ev.target.closest("[data-consejo]");
-    if (!b && ev.target !== caja) return;
-    if (b?.dataset.consejo === "nunca") { guardarPref("consejos", "0"); aviso("Listo. Puedes volver a activarlos en Perfil → Ayuda."); }
-    caja.classList.add("saliendo");
-    setTimeout(() => caja.remove(), 200);
-  });
+  mostrarDoctor({ pose: p.pose, etiqueta: `💡 Consejo del Dr. Finlay · ${k + 1} de ${pasos.length}`, titulo: p.titulo, texto: `<p>${p.texto}</p>`, ir: p.ir });
 }
 
 function vistaAyuda(paso = 0) {
@@ -3036,6 +3143,7 @@ async function router() {
     else if (partes[0] === "copia") await vistaCopia();
     else if (partes[0] === "ayuda") vistaAyuda(partes[1]);
     else await vistaInicio();
+    doctorDePantalla(partes[0] === "doc" ? "doc-" + (vistaDoc.pestanaActual || "conferencia") : partes[0] || "inicio");
   } catch (e) {
     console.error(e);
     poner("Error", `<p class="vacio">Algo salió mal: ${esc(e.message)}</p><a class="btn" href="#/">Volver al inicio</a>`);
