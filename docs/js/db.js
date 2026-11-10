@@ -1,7 +1,7 @@
 // Base de datos local de Finlay (IndexedDB): todo se guarda en el teléfono.
 
 const NOMBRE_DB = "finlay";
-const VERSION_DB = 5;
+const VERSION_DB = 6;
 let dbPromesa = null;
 
 function abrir() {
@@ -42,6 +42,10 @@ function abrir() {
         // Diapositivas como imágenes (clave "docId|número") y PDF originales cargados desde el teléfono (clave docId)
         db.createObjectStore("diapositivas");
         db.createObjectStore("archivos");
+      }
+      if (ev.oldVersion < 6) {
+        // Mensajes recibidos y enviados (entregas de profesores, avisos del administrador)
+        db.createObjectStore("mensajes", { keyPath: "id" });
       }
     };
     pet.onsuccess = () => resolver(pet.result);
@@ -355,4 +359,15 @@ export async function fragmentosDe(docId) {
 export async function textoDePagina(docId, pagina) {
   const frags = (await fragmentosDe(docId)).filter((f) => f.pagina === pagina);
   return frags.map((f) => f.texto).join("\n\n");
+}
+
+// ---------- Mensajes (entregas y avisos, viajan como archivos) ----------
+export async function listarMensajes() {
+  return promesa((await almacen("mensajes")).getAll());
+}
+export async function guardarMensaje(mensaje) {
+  return promesa((await almacen("mensajes", "readwrite")).put(mensaje));
+}
+export async function borrarMensaje(id) {
+  return promesa((await almacen("mensajes", "readwrite")).delete(id));
 }

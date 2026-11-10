@@ -15,6 +15,7 @@ const capital = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 export function tarjetasDePreguntas(doc, textoRespuesta) {
   const salida = [];
   (doc.cuestionario || []).forEach((p, i) => {
+    if (p.oculta) return; // pregunta quitada por el estudiante
     const base = { docId: doc.id, fuente: p.fuente || "", cita: p.cita || "", origen: "pregunta" };
     if (p.tipo === "vf" && Array.isArray(p.afirmaciones)) {
       p.afirmaciones.forEach((a, j) => salida.push({ ...base, id: `${doc.id}|p${i}|${j}`,

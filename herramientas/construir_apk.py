@@ -43,7 +43,7 @@ TIPOS_RECIBIDOS = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-powerpoint", "application/msword",
-    "application/zip", "application/x-zip-compressed", "application/octet-stream",
+    "application/zip", "application/x-zip-compressed", "application/octet-stream", "application/json",
 ]
 NS_ANDROID = "http://schemas.android.com/apk/res/android"
 TEMA = 0x01030241          # @android:style/Theme.Material.Light.NoActionBar
@@ -315,6 +315,7 @@ def main():
     p.add_argument("--version-code", type=int, default=1)
     p.add_argument("--version-name", default="1.0")
     p.add_argument("--paquetes", help="carpeta con paquetes .zip que la app carga sola al abrirse")
+    p.add_argument("--www", help="carpeta con la app web ya preparada (por ejemplo, con el código ofuscado); por defecto, docs/")
     args = p.parse_args()
 
     tmp = Path(tempfile.mkdtemp(prefix="finlay-apk-"))
@@ -337,9 +338,10 @@ def main():
         z.write(RAIZ / "android" / "res" / "icono_frente.png", "res/drawable/icono_frente.png", compress_type=zipfile.ZIP_STORED)
         z.writestr("res/drawable-anydpi-v26/icono.xml", icono_adaptable())
         z.write(dex, "classes.dex")
-        for f in sorted((RAIZ / "docs").rglob("*")):
+        www = Path(args.www) if args.www else RAIZ / "docs"
+        for f in sorted(www.rglob("*")):
             if f.is_file():
-                z.write(f, "assets/www/" + f.relative_to(RAIZ / "docs").as_posix())
+                z.write(f, "assets/www/" + f.relative_to(www).as_posix())
         if args.paquetes:
             # Paquetes incluidos: van sin comprimir (ya son .zip) y con una lista para la app
             import hashlib, json

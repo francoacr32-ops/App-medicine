@@ -3,6 +3,8 @@
 // El formato está explicado en FORMATO-PAQUETE.md (en la raíz del repositorio).
 
 import * as db from "./db.js";
+import { paqueteFirmado, leerCodigoProfesor } from "./seguridad.js";
+import { generarCuestionario } from "./generar.js";
 import { fragmentarPagina, limpiar } from "./texto.js";
 import { errorEnPregunta } from "./cuestionario.js";
 import { cargarJSZip } from "./extraer.js";
@@ -72,6 +74,8 @@ export async function leerPaquete(archivo) {
     throw new Error("El archivo no es un paquete de Finlay válido (no se pudo leer).");
   }
   Object.defineProperty(datos, "__zip", { value: zip, enumerable: false });
+  // ¿Lo firmó el administrador? Solo los paquetes firmados pueden cambiar el contenido oficial
+  Object.defineProperty(datos, "__oficial", { value: await paqueteFirmado(datos), enumerable: false, writable: true });
   if (datos?.formato !== "finlay-paquete") throw new Error("Este archivo no es un paquete de Finlay.");
   datos.materiales ||= [];
   if (!Array.isArray(datos.materiales)) throw new Error("Este archivo no es un paquete de Finlay.");
@@ -87,9 +91,21 @@ export async function leerPaquete(archivo) {
 }
 
 /** Guarda el paquete en el teléfono. Si la conferencia ya existe, le añade el resumen y el cuestionario. */
-export async function importarPaquete(datos, progreso = () => {}) {
+export async function importarPaquete(datos, progreso = () => {}, opciones = {}) {
   const todos = await db.listarDocumentos();
-  const resultado = { nuevos: 0, actualizados: 0, resumenes: 0, preguntas: 0, progreso: false };
+  // Oficial = viene dentro de la app (confiable) o lo firmó el administrador
+  const oficial = !!(opciones.confiable || datos.__oficial);
+  const resultado = { nuevos: 0, actualizados: 0, resumenes: 0, preguntas: 0, progreso: false, oficial, omitidos: 0, docs: [] };
+  // Mensaje que acompaña al paquete (entrega de un profesor, aviso del administrador…)
+  const msj = datos.mensaje && typeof datos.mensaje === "object" ? datos.mensaje : null;
+  let remitente = null;
+  if (msj) {
+    const prof = msj.de?.codigo ? await leerCodigoProfesor(msj.de.codigo) : null;
+    remitente = { nombre: String(msj.de?.nombre || prof?.nombre || "Sin nombre").slice(0, 60),
+      rol: datos.__oficial ? "admin" : prof ? "profesor" : "estudiante", verificado: !!(datos.__oficial || prof) };
+    resultado.mensaje = { id: String(msj.id || Date.now()), texto: String(msj.texto || "").slice(0, 4000), fecha: Number(msj.fecha) || Date.now(),
+      para: String(msj.para || "todos"), de: remitente };
+  }
   const respuestasPrevias = new Map((await db.todasLasRespuestas()).map((r) => [r.id, r]));
   const respuestasNuevas = [];
   resultado.imagenes = await importarImagenes(datos);
@@ -102,7 +118,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
   }
 
   // Asignaturas que el paquete pide quitar (con sus materiales y progreso)
-  for (const q of datos.quitarAsignaturas || []) {
+  for (const q of oficial ? datos.quitarAsignaturas || [] : []) {
     const id = `${Number(q.anio)}|${String(q.nombre).trim()}`;
     if (await db.obtenerAsignatura(id)) {
       await db.borrarAsignatura(id);
@@ -111,7 +127,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
   }
 
   // Materiales que el paquete pide quitar (solo los que vinieron en un paquete y nunca los que cargaste tú)
-  for (const q of datos.quitarMateriales || []) {
+  for (const q of oficial ? datos.quitarMateriales || [] : []) {
     const id = `${Number(q.anio)}|${String(q.asignatura).trim().replace(/\|/g, "-")}`;
     const clave = sinExtension(String(q.nombre));
     for (const d of todos.filter((x) => x.origen === "paquete" && sinExtension(x.nombre) === clave && x.asignaturas.includes(id))) {
@@ -124,7 +140,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
   }
 
   // Resúmenes de asignatura (mapa conceptual, cuadros y lo esencial de cada tema)
-  for (const r of datos.resumenesAsignatura || []) {
+  for (const r of oficial ? datos.resumenesAsignatura || [] : []) {
     const asig = await db.crearAsignatura(Number(r.anio), String(r.asignatura).trim());
     await db.guardarResumenAsignatura(asig.id, r);
     resultado.resumenesAsig = (resultado.resumenesAsig || 0) + 1;
@@ -137,7 +153,11 @@ export async function importarPaquete(datos, progreso = () => {}) {
     const candidatos = todos.filter((d) => sinExtension(d.nombre) === clave);
     let doc = candidatos.find((d) => d.asignaturas.includes(asig.id)) || candidatos.find((d) => d.tipo === "libro");
 
-    if (doc) {
+    // Un paquete sin firma no puede cambiar el contenido oficial: solo se restaura el progreso
+    const docOficial = doc && doc.origen === "paquete" && doc.oficial !== false;
+    if (doc && docOficial && !oficial) {
+      resultado.omitidos++;
+    } else if (doc) {
       if (!doc.asignaturas.includes(asig.id)) doc.asignaturas.push(asig.id);
       if (m.resumen) doc.resumen = m.resumen;
       if (m.leccion) doc.leccion = m.leccion;
@@ -145,11 +165,13 @@ export async function importarPaquete(datos, progreso = () => {}) {
       if (m.cuestionario) {
         // Si cambian las preguntas, el progreso anterior ya no corresponde.
         // Pero si solo se añadieron preguntas nuevas al final, lo ya respondido se conserva.
+        // Las preguntas que el estudiante quitó (oculta) siguen quitadas.
+        const sinMarca = (lista) => JSON.stringify(lista.map(({ oculta, ...p }) => p));
         const viejas = doc.cuestionario || [];
         const soloAnadidas = viejas.length <= m.cuestionario.length &&
-          JSON.stringify(viejas) === JSON.stringify(m.cuestionario.slice(0, viejas.length));
+          sinMarca(viejas) === sinMarca(m.cuestionario.slice(0, viejas.length));
         if (!soloAnadidas) await db.borrarRespuestas(doc.id);
-        doc.cuestionario = m.cuestionario;
+        doc.cuestionario = m.cuestionario.map((p, k) => (soloAnadidas && viejas[k]?.oculta ? { ...p, oculta: true } : p));
       }
       await db.actualizarDocumento(doc);
       resultado.actualizados++;
@@ -178,11 +200,21 @@ export async function importarPaquete(datos, progreso = () => {}) {
         leccion: m.leccion || null,
         ...(Number.isFinite(m.orden) ? { orden: m.orden } : {}),
         origen: "paquete",
+        ...(oficial ? {} : { oficial: false }),
+        ...(m.cuestionarioAuto ? { cuestionarioAuto: true } : {}),
+        ...(remitente ? { de: remitente, nuevo: true }
+          : opciones.marcarNuevo ? { nuevo: true, ...(datos.__oficial ? { de: { nombre: "Administrador", rol: "admin", verificado: true } } : {}) } : {}),
       };
+      // Material recibido sin cuestionario: la app le hace uno automático (borrador)
+      if (msj && !doc.cuestionario?.length && doc.tipo !== "libro" && paginas.length) {
+        const auto = generarCuestionario(doc, paginas.map((p) => ({ pagina: p.n, texto: p.texto })));
+        if (auto.length) { doc.cuestionario = auto; doc.cuestionarioAuto = true; }
+      }
       await db.guardarDocumento(doc, fragmentos);
       todos.push(doc);
       resultado.nuevos++;
     }
+    resultado.docs.push(doc.id);
     // Libro que también se usa en otras asignaturas
     for (const otra of m.tambienEn || []) {
       if (!(otra.anio >= 1 && otra.anio <= 6) || !otra.asignatura) continue;
@@ -196,7 +228,7 @@ export async function importarPaquete(datos, progreso = () => {}) {
       if (!previa || (previa.fecha || 0) < (r.fecha || 0)) respuestasNuevas.push({ ...r, id, docId: doc.id });
     }
     // Diapositivas originales (imágenes) y PDF que vienen dentro del .zip
-    const zip = datos.__zip;
+    const zip = docOficial && !oficial ? null : datos.__zip; // sin firma no se tocan las diapositivas oficiales
     if (zip && m.diapositivas?.carpeta && m.diapositivas.total > 0) {
       const { carpeta, total } = m.diapositivas;
       let lote = [];
@@ -220,6 +252,11 @@ export async function importarPaquete(datos, progreso = () => {}) {
     if (zip && m.pdf && zip.file(m.pdf)) {
       await db.guardarArchivo(doc.id, new Blob([await zip.file(m.pdf).async("arraybuffer")], { type: "application/pdf" }));
       doc.pdf = true;
+      await db.actualizarDocumento(doc);
+    }
+    if (zip && m.archivoOriginal && ["docx", "pptx"].includes(m.original) && zip.file(m.archivoOriginal)) {
+      await db.guardarArchivo(doc.id, new Blob([await zip.file(m.archivoOriginal).async("arraybuffer")]));
+      doc.original = m.original;
       await db.actualizarDocumento(doc);
     }
     if (m.resumen) resultado.resumenes++;

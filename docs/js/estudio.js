@@ -40,15 +40,15 @@ export function preguntasDelRepaso(docs, respuestas, maximo = 15, nuevasMax = 5)
   const porId = new Map(docs.map((d) => [d.id, d]));
   const fecha = hoy();
   const tocan = respuestas
-    .filter((r) => r.proxima && r.proxima <= fecha && porId.get(r.docId)?.cuestionario?.[r.indice])
+    .filter((r) => r.proxima && r.proxima <= fecha && porId.get(r.docId)?.cuestionario?.[r.indice] && !porId.get(r.docId).cuestionario[r.indice].oculta)
     .sort((a, b) => (a.caja || 0) - (b.caja || 0) || a.fecha - b.fecha)
     .map((r) => ({ doc: porId.get(r.docId), i: r.indice }));
 
   const respondidas = new Set(respuestas.map((r) => r.id));
   const nuevas = [];
   for (const d of [...docs].sort((a, b) => a.fecha - b.fecha)) {
-    (d.cuestionario || []).forEach((_, i) => {
-      if (!respondidas.has(`${d.id}|${i}`)) nuevas.push({ doc: d, i });
+    (d.cuestionario || []).forEach((p, i) => {
+      if (!p.oculta && !respondidas.has(`${d.id}|${i}`)) nuevas.push({ doc: d, i });
     });
   }
   const lista = tocan.slice(0, maximo);
@@ -72,7 +72,7 @@ export function preguntasDeExamen(docs, cantidad, azar = Math.random) {
   // para que una asignatura con muchas preguntas no se coma todo el examen.
   const grupos = new Map();
   for (const d of docs) {
-    const preguntas = (d.cuestionario || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== "abierta").map(({ i }) => ({ doc: d, i }));
+    const preguntas = (d.cuestionario || []).map((p, i) => ({ p, i })).filter(({ p }) => p.tipo !== "abierta" && !p.oculta).map(({ i }) => ({ doc: d, i }));
     if (!preguntas.length) continue;
     const asig = d.asignaturas?.[0] ?? "";
     if (!grupos.has(asig)) grupos.set(asig, []);
@@ -163,6 +163,9 @@ export function crearPaquete({ titulo, docs, fragmentosPorDoc, respuestas = null
       });
     if (d.resumen) m.resumen = d.resumen;
     if (d.cuestionario) m.cuestionario = d.cuestionario;
+    if (d.leccion) m.leccion = d.leccion;
+    if (d.cuestionarioAuto) m.cuestionarioAuto = true;
+    if (Number.isFinite(d.orden)) m.orden = d.orden;
     if (respuestas) {
       const propias = respuestas.filter((r) => r.docId === d.id);
       if (propias.length) m.progreso = propias.map(({ id, docId, ...resto }) => resto);

@@ -11,3 +11,6 @@ __pycache__/
 *.keystore
 
 android/vista-icono.png
+
+# Llave del administrador de Finlay: nunca se publica
+*.llave

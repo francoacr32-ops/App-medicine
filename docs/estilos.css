@@ -1494,3 +1494,35 @@ html, body { overflow-x: clip; }
 .consejo-texto ul { margin: 0 0 10px; padding-left: 18px; font-size: .9rem; line-height: 1.45; }
 .consejo-texto li { margin-bottom: 4px; }
 .consejo-globo { max-height: 70vh; overflow-y: auto; }
+
+/* Registro, mensajes, administración y edición de cuestionarios */
+.registro { text-align: center; }
+.registro form { text-align: left; display: flex; flex-direction: column; gap: 12px; }
+.registro label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.registro-doctor { width: 110px; height: 130px; object-fit: contain; }
+.registro-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.registro-rol { position: relative; }
+.registro-rol input { position: absolute; opacity: 0; }
+.registro-rol span { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 14px 8px; border-radius: 16px; border: 2px solid var(--borde);
+  background: var(--tarjeta); font-size: 1.6rem; text-align: center; }
+.registro-rol span b { font-size: 1rem; }
+.registro-rol span small { font-size: .78rem; color: var(--suave); font-weight: 400; }
+.registro-rol input:checked + span { border-color: var(--acento); background: var(--fondo-2); }
+.perfil-rol { font-size: .85rem; color: var(--suave); font-weight: 600; }
+.enlace-admin { display: block; text-align: center; margin: 14px 0 4px; font-size: .82rem; color: var(--suave); }
+.mensaje { margin: 12px 0; padding: 12px 14px; border-radius: 16px; background: var(--tarjeta); border: 1px solid var(--borde); }
+.mensaje.nuevo { border: 2px solid var(--acento); }
+.mensaje.enviado { background: var(--fondo-2); }
+.mensaje-cabeza { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+.mensaje-texto { margin: 0 0 8px; line-height: 1.5; word-break: break-word; }
+.mensaje-docs { margin: 0 0 8px; padding-left: 0; list-style: none; }
+.mensaje-docs li { padding: 4px 0; }
+.chip-ok { background: var(--exito); color: #fff; border-color: transparent; }
+.lista-check { max-height: 260px; overflow-y: auto; margin: 6px 0 12px; padding: 4px 8px; border: 1px solid var(--borde); border-radius: 12px; }
+.lista-check .check { display: flex; gap: 8px; align-items: flex-start; padding: 6px 0; }
+.codigo-prof { width: 100%; font-family: monospace; font-size: .78rem; word-break: break-all; }
+.novedad { flex-direction: row; align-items: center; gap: 10px; margin-bottom: 8px; padding: 10px 14px; text-decoration: none; color: inherit; border: 2px solid var(--acento); }
+.novedad-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.quitar-pregunta { display: block; margin: 10px 0 0 auto; padding: 6px 10px; border: 1px dashed var(--borde); border-radius: 10px; background: none;
+  color: var(--suave); font: inherit; font-size: .8rem; }
+.aviso-auto { padding: 8px 12px; border-radius: 10px; background: var(--naranja-suave); color: #5a3a00; }

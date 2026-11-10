@@ -3,6 +3,8 @@
 import * as db from "./db.js";
 import { extraerTexto, tipoDeArchivo, FORMATOS, cargarJSZip } from "./extraer.js";
 import { tipoOriginal, pintarOriginal, zoomOriginal } from "./original.js";
+import * as seg from "./seguridad.js";
+import { generarCuestionario, definicionesDe, resumenDeAsignatura } from "./generar.js";
 import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
@@ -301,6 +303,14 @@ async function vistaInicio() {
   const r = await resumenDeEstudio();
   const meta = metaDiaria();
   const { lista } = preguntasDelRepaso(r.conPreguntas, r.respuestas, meta);
+  // Materiales recibidos de profesores o del administrador que todavía no se han abierto
+  const recibidos = docs.filter((d) => d.nuevo).sort((a, b) => b.fecha - a.fecha);
+  const sinLeer = (await db.listarMensajes()).filter((m) => !m.leido && !m.enviado).length;
+  const novedades = recibidos.length || sinLeer ? `<section class="novedades">
+      <div class="titulo-seccion"><h2>📩 Nuevo para ti</h2><a href="#/mensajes">Mensajes${sinLeer ? ` (${sinLeer})` : ""} ${ico("chevron")}</a></div>
+      ${recibidos.slice(0, 5).map((d) => `<a class="tarjeta novedad" href="#/doc/${d.id}"><span class="novedad-cuerpo"><b>${esc(d.nombre)}</b>
+        <span class="sub">${d.de ? `${ROL_TEXTO[d.de.rol] || ""} ${esc(d.de.nombre)}${d.de.verificado ? " ✔" : ""} · ` : ""}${esc(d.asignaturas[0].split("|")[1])}</span></span>${ico("chevron", "flecha-der")}</a>`).join("")}
+    </section>` : "";
 
   const pctMeta = Math.min(100, Math.round((r.hoy.preguntas / meta) * 100));
   const t = await datosDeTiempo();
@@ -382,6 +392,7 @@ async function vistaInicio() {
       <span class="btn-continuar-flecha">${ico("chevron")}</span></a>
     ${pref("guiaVista") ? "" : `<a class="tarjeta guia-tarjeta" href="#/ayuda/0"><img src="iconos/doctor/saluda.webp" alt="">
       <span><b>¿Primera vez en Finlay?</b><small>El Dr. Finlay te enseña la app en 2 minutos</small></span>${ico("chevron", "flecha-der")}</a>`}
+    ${novedades}
     <div class="titulo-seccion"><h2>${ico("barras", "ico-titulo")}Hoy en tu plan</h2><a href="#/evaluaciones">Ver todo ${ico("chevron")}</a></div>
     ${plan.join("")}
     <div class="titulo-seccion"><h2>Tus asignaturas</h2><a href="#/temas">Ver todas ${ico("chevron")}</a></div>
@@ -779,6 +790,7 @@ async function vistaEvaluaciones() {
 // ---------- Pantalla: Perfil (nombre y ajustes) ----------
 async function vistaPerfil() {
   const r = await resumenDeEstudio();
+  const sinLeer = (await db.listarMensajes()).filter((m) => !m.leido && !m.enviado).length;
   const nombre = pref("nombre").trim();
   const fila = (href, icono, texto, extra = "") =>
     `<a class="menu-fila" href="${href}">${ico(icono)}<span>${texto}</span>${extra}${ico("chevron", "flecha-der")}</a>`;
@@ -790,6 +802,7 @@ async function vistaPerfil() {
         <span class="avatar-lapiz">${ico("lapiz")}</span>
         <input type="file" id="aj-foto" accept="image/*" hidden></label>
       <b class="perfil-nombre">${esc(nombre || "Estudiante")}</b>
+      <span class="perfil-rol">${seg.esAdmin() ? "🔑 Administrador" : pref("rol") === "profesor" ? (pref("profesorOk") ? "✔ Profesor verificado" : "Profesor (sin verificar)") : `Estudiante${pref("anioEst") ? " · " + ANIOS[Number(pref("anioEst")) - 1] : ""}`}</span>
       <span class="perfil-pildora"><img src="iconos/dis/mochila.webp" alt=""> ${esc(r.nivel.nombre)}</span>
       <span class="perfil-nivel2"><span class="nivel-barra brillo"><span style="width:${Math.max(4, r.nivel.pct)}%"></span></span>
         <span class="perfil-faltan">${r.nivel.siguiente ? `${r.nivel.faltan} puntos para ${esc(r.nivel.siguiente.nombre.toLowerCase())}` : "¡Nivel máximo!"}</span></span>
@@ -799,13 +812,17 @@ async function vistaPerfil() {
       <a class="cristal-oscuro" href="#/progreso/logros"><img src="iconos/dis/diamante.webp" alt=""><span><b class="grande2">${textoPuntos(r.puntos)}</b><span>Puntos</span></span><i>${ico("chevron")}</i></a>
     </div>
     <nav class="menu-cristal">
+      ${filaCristal("#/mensajes", "documento", "Mensajes y entregas", sinLeer ? `<span class="globo">${sinLeer}</span>` : "")}
+      ${seg.esAdmin() ? filaCristal("#/admin", "ajustes", "Administración") : ""}
       ${filaCristal("#/progreso", "barras", "Mi progreso")}
       ${filaCristal("#/notas", "lapiz", "Mis notas", notas.todasLasNotas().length ? `<span class="globo">${notas.todasLasNotas().length}</span>` : "")}
       ${filaCristal("#/biblioteca/favoritos", "corazon", "Mis favoritos", favoritos().length ? `<span class="globo">${favoritos().length}</span>` : "")}
       ${filaCristal("#/copia", "documento", "Copia y compartir")}
       ${filaCristal("#/planes", "calendario", "Plan para el examen")}
       ${filaCristal("#/ajustes", "ajustes", "Configuración")}
+      ${filaCristal("#/registro", "lapiz", "Mi registro: estudiante o profesor")}
       ${filaCristal("#/ayuda/0", "ayuda", "Ayuda: el Dr. Finlay te enseña la app")}
+      ${seg.esAdmin() ? "" : `<a class="enlace-admin" href="#/admin">🔑 Acceso del administrador</a>`}
     </nav>
     <button id="instalar" class="btn secundario" hidden>📲 Instalar Finlay en el teléfono</button>
     <p class="nota centro">Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915).</p>`, null, { sinBarra: true });
@@ -855,7 +872,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.2 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.3 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1221,6 +1238,11 @@ async function vistaDoc(docId, pestana, irA = 0) {
   if (pestana === "clase" && !doc.leccion) pestana = "conferencia";
   if (pestana === "conferencia" && doc.leccion && !tieneVisual(doc)) pestana = "clase";
   vistaDoc.pestanaActual = pestana;
+  if (doc.nuevo) { // material recibido: ya se abrió
+    const real = await db.obtenerDocumento(docId);
+    delete real.nuevo;
+    await db.actualizarDocumento(real);
+  }
   const asigActual = doc.asignaturas[0];
   const base = `#/doc/${docId}`;
   const nombreTipo = doc.tipo === "libro" ? "Libro" : doc.tipo === "consulta" ? "Consulta" : doc.tipo === "taller" ? "Clase taller" : "Conferencia";
@@ -1240,8 +1262,8 @@ async function vistaDoc(docId, pestana, irA = 0) {
     cuerpo = nPreg
       ? await htmlCuestionario(doc)
       : `<div class="no-encontrado"><b>Todavía no hay cuestionario.</b>
-          <p>Pulsa <b>📤 Exportar texto</b> y mándale el archivo a Claude: te devolverá el cuestionario.</p>
-          <button class="btn mini" data-accion="exportar" data-id="${doc.id}">📤 Exportar texto</button></div>`;
+          <p>Finlay puede hacer uno automático con las definiciones del texto. Es un borrador: después puedes quitar las preguntas que no te gusten.</p>
+          <button class="btn" data-accion="generar-cuestionario" data-id="${doc.id}">⚙ Generar cuestionario automático</button></div>`;
   } else if (tieneVisual(doc)) {
     // Diapositivas con su formato original, una debajo de otra como en un lector de PDF
     const total = totalPaginas(doc);
@@ -1415,6 +1437,7 @@ function htmlTarjeta(k, previa = null, conOrigen = false) {
     ${htmlFigura(p.imagen, p.pie)}
     <div class="opciones">${htmlOpciones(p, k)}</div>
     <div class="explicacion" hidden></div>
+    ${modo === "normal" && !conOrigen ? `<button class="quitar-pregunta" data-accion="quitar-pregunta" data-i="${k}">🗑 Quitar esta pregunta (tiene un error)</button>` : ""}
   </article>`;
 }
 
@@ -1661,7 +1684,9 @@ async function htmlCuestionario(doc) {
   const resp = new Map((await db.respuestasDe(doc.id)).map((r) => [r.indice, r]));
   const filtro = vistaDoc.filtro || "todas";
   const grupo = (i) => (!resp.has(i) ? 0 : resp.get(i).ultima === false ? 1 : 2); // no vistas, falladas, acertadas
-  const visibles = barajar(doc.cuestionario.map((p, i) => ({ p, i })))
+  const ocultas = doc.cuestionario.filter((p) => p.oculta).length;
+  const totalVisibles = doc.cuestionario.length - ocultas;
+  const visibles = barajar(doc.cuestionario.map((p, i) => ({ p, i }))).filter(({ p }) => !p.oculta)
     .filter(({ p, i }) => filtro === "todas" || (filtro === "falladas" ? resp.get(i)?.ultima === false : p.tipo === filtro))
     .sort((a, b) => grupo(a.i) - grupo(b.i));
   const tipos = new Set(doc.cuestionario.map((p) => p.tipo));
@@ -1674,16 +1699,18 @@ async function htmlCuestionario(doc) {
     const r = await db.respuestasDe(doc.id);
     const bienAhora = r.filter((x) => x.ultima).length;
     document.getElementById("marcador").textContent =
-      `Respondidas ${r.length} de ${doc.cuestionario.length} · Correctas ${bienAhora}`;
-    if (r.length >= doc.cuestionario.length && antes < doc.cuestionario.length)
-      await terminarPrueba({ titulo: doc.nombre, acertadas: bienAhora, total: doc.cuestionario.length, puntosInicio });
+      `Respondidas ${Math.min(r.length, totalVisibles)} de ${totalVisibles} · Correctas ${bienAhora}`;
+    if (r.length >= totalVisibles && antes < totalVisibles)
+      await terminarPrueba({ titulo: doc.nombre, acertadas: bienAhora, total: totalVisibles, puntosInicio });
     antes = r.length;
   };
   const bien = [...resp.values()].filter((r) => r.ultima).length;
-  return `<p class="marcador" id="marcador">Respondidas ${resp.size} de ${doc.cuestionario.length} · Correctas ${bien}</p>
+  return `<p class="marcador" id="marcador">Respondidas ${Math.min(resp.size, totalVisibles)} de ${totalVisibles} · Correctas ${bien}</p>
+    ${doc.cuestionarioAuto ? `<p class="nota aviso-auto">⚙ Cuestionario automático (borrador): Finlay lo hizo solo con las definiciones del texto. Si una pregunta está mal, quítala con 🗑.</p>` : ""}
     <div class="chips">${chips}</div>
     ${visibles.map(({ i }) => htmlTarjeta(i, resp.get(i))).join("") ||
       `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
+    ${ocultas ? `<button class="btn mini secundario abajo" data-accion="restaurar-preguntas">↩ Restaurar ${ocultas} pregunta${ocultas === 1 ? "" : "s"} quitada${ocultas === 1 ? "" : "s"}</button>` : ""}
     <button class="btn mini peligro abajo" data-accion="reiniciar">Empezar de cero este cuestionario</button>`;
 }
 
@@ -2109,13 +2136,13 @@ async function vistaCopia() {
   );
 }
 
-async function exportarPaquete(ambito, conProgreso) {
+async function exportarPaquete(ambito, conProgreso, extra = {}) {
   mostrarProgreso("Preparando el archivo…");
   try {
-    const docs = await documentosDelAmbito(ambito);
+    const docs = extra.docs || await documentosDelAmbito(ambito);
     const fragmentosPorDoc = new Map();
     for (const d of docs) fragmentosPorDoc.set(d.id, await db.fragmentosDe(d.id));
-    const asignaturas = (await db.listarAsignaturas()).filter((a) =>
+    const asignaturas = (await db.listarAsignaturas()).filter((a) => extra.docs ? extra.docs.some((d) => d.asignaturas.includes(a.id)) :
       ambito === "todo" || (ambito.startsWith("anio:") ? a.anio === Number(ambito.slice(5)) : a.id === ambito));
     const imagenes = {};
     for (const d of docs)
@@ -2127,18 +2154,22 @@ async function exportarPaquete(ambito, conProgreso) {
     const paquete = crearPaquete({
       imagenes,
       asignaturas,
-      titulo: conProgreso ? "Copia de seguridad de Finlay" : `Finlay: ${nombreAmbito(ambito)}`,
+      titulo: extra.titulo || (conProgreso ? "Copia de seguridad de Finlay" : `Finlay: ${nombreAmbito(ambito)}`),
       docs,
       fragmentosPorDoc,
       respuestas: conProgreso ? await db.todasLasRespuestas() : null,
       diario: conProgreso ? await db.listarDiario() : null,
     });
-    const base = conProgreso
+    if (extra.mensaje) paquete.mensaje = extra.mensaje;
+    if (extra.preparar) extra.preparar(paquete);
+    // El administrador firma lo que publica (no las copias de seguridad, que son personales)
+    const firmado = async () => (seg.esAdmin() && !conProgreso ? await seg.firmarPaquete(paquete) : paquete);
+    const base = extra.base || (conProgreso
       ? `finlay-copia-${db.hoy()}`
-      : `finlay-${normalizar(nombreAmbito(ambito)).trim().replace(/\s+/g, "-")}`;
-    if (!docs.some((d) => d.diapositivas || d.pdf)) {
+      : `finlay-${normalizar(nombreAmbito(ambito)).trim().replace(/\s+/g, "-")}`);
+    if (!docs.some((d) => d.diapositivas || d.pdf || d.original)) {
       mostrarProgreso(null);
-      await compartirArchivo(base + ".json", JSON.stringify(paquete), "application/json");
+      await compartirArchivo(base + ".json", JSON.stringify(await firmado()), "application/json");
       return;
     }
     // Con diapositivas o PDF: un .zip con paquete.json + las imágenes y PDF originales
@@ -2160,6 +2191,15 @@ async function exportarPaquete(ambito, conProgreso) {
         }
         if (total) m.diapositivas = { carpeta, total };
       }
+      if (d.original) {
+        // Word o PowerPoint: viaja el archivo tal cual, para verlo con su formato
+        const blob = await db.obtenerArchivo(d.id);
+        if (blob && blob.size <= 25 * 1048576) {
+          m.archivoOriginal = `archivos/${String(k + 1).padStart(3, "0")}.${d.original}`;
+          m.original = d.original;
+          zip.file(m.archivoOriginal, blob);
+        }
+      }
       if (d.pdf) {
         // Los libros y los PDF pesados no van en la copia: se pasan aparte por Zapya
         const blob = await db.obtenerArchivo(d.id);
@@ -2171,7 +2211,7 @@ async function exportarPaquete(ambito, conProgreso) {
         }
       }
     }
-    zip.file("paquete.json", JSON.stringify(paquete), { compression: "DEFLATE" });
+    zip.file("paquete.json", JSON.stringify(await firmado()), { compression: "DEFLATE" });
     mostrarProgreso("Juntando todo en un archivo…");
     const blob = await zip.generateAsync({ type: "blob", compression: "STORE" });
     mostrarProgreso(null);
@@ -2312,6 +2352,192 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
     </a>`, null, { marca: true });
 }
 
+// ---------- Registro: estudiante o profesor ----------
+function vistaRegistro() {
+  const rol = pref("rol", "estudiante");
+  poner("Registro", `
+    <section class="panel registro">
+      <img src="iconos/doctor/saluda.webp" alt="" class="registro-doctor">
+      <p class="grande">¡Bienvenido a Finlay!</p>
+      <p class="sub">Dinos quién eres para preparar la app. Todo se guarda solo en tu teléfono.</p>
+      <form data-form="registro">
+        <label>Tu nombre<input name="nombre" value="${esc(pref("nombre"))}" maxlength="30" required placeholder="Escribe tu nombre"></label>
+        <div class="registro-roles">
+          <label class="registro-rol"><input type="radio" name="rol" value="estudiante" ${rol !== "profesor" ? "checked" : ""}><span>🎒<b>Estudiante</b><small>Estudio la carrera</small></span></label>
+          <label class="registro-rol"><input type="radio" name="rol" value="profesor" ${rol === "profesor" ? "checked" : ""}><span>👨‍🏫<b>Profesor</b><small>Entrego materiales</small></span></label>
+        </div>
+        <label data-solo="estudiante">¿En qué año estás?<select name="anio">${ANIOS.map((a, i) => `<option value="${i + 1}" ${Number(pref("anioEst", "1")) === i + 1 ? "selected" : ""}>${a}</option>`).join("")}</select></label>
+        <label data-solo="profesor" hidden>Código de profesor (te lo da el administrador)
+          <textarea name="codigo" rows="3" placeholder="PROF.…" autocomplete="off">${esc(pref("codigoProf"))}</textarea>
+          <small class="sub">Si todavía no lo tienes, déjalo vacío: lo puedes poner después aquí mismo (Perfil → tu rol).</small></label>
+        <button class="btn ancho">Entrar</button>
+      </form>
+    </section>`, pref("rol") ? "#/perfil" : null);
+  const form = $app.querySelector("[data-form=registro]");
+  const pintar = () => form.querySelectorAll("[data-solo]").forEach((el) => (el.hidden = el.dataset.solo !== form.rol.value));
+  form.addEventListener("change", pintar);
+  pintar();
+}
+
+async function guardarRegistro(f) {
+  const rol = f.rol.value === "profesor" ? "profesor" : "estudiante";
+  const codigo = f.codigo.value.trim();
+  if (rol === "profesor" && codigo) {
+    const datos = await seg.leerCodigoProfesor(codigo);
+    if (!datos) return alert("Ese código de profesor no es válido o ya venció.\nRevisa que lo copiaste completo o pídele otro al administrador.");
+    guardarPref("codigoProf", codigo);
+    guardarPref("profesorOk", "1");
+  } else if (rol === "profesor") {
+    guardarPref("codigoProf", "");
+    guardarPref("profesorOk", "");
+  }
+  guardarPref("nombre", f.nombre.value.trim());
+  guardarPref("rol", rol);
+  if (rol === "estudiante") guardarPref("anioEst", f.anio.value);
+  aviso(rol === "profesor" ? (codigo ? "✔ Profesor verificado" : "Registrado como profesor (sin verificar)") : "✅ ¡Listo!");
+  location.hash = pref("guiaVista") ? "#/" : "#/ayuda/0";
+  router();
+}
+
+// ---------- Mensajes y entregas (viajan como archivos por WhatsApp o Zapya) ----------
+const ROL_TEXTO = { admin: "🔑 Administrador", profesor: "👨‍🏫 Profesor", estudiante: "🎒 Estudiante" };
+const esPersonal = (d) => d.origen !== "paquete" || d.oficial === false;
+
+async function vistaMensajes() {
+  const mensajes = (await db.listarMensajes()).sort((a, b) => (b.recibido || b.fecha) - (a.recibido || a.fecha));
+  const docs = new Map((await db.listarDocumentos()).map((d) => [d.id, d]));
+  for (const m of mensajes.filter((x) => !x.leido && !x.enviado)) await db.guardarMensaje({ ...m, leido: true });
+  poner("Mensajes y entregas", `
+    <p class="sub">Los mensajes viajan como archivos: se envían por <b>WhatsApp, Telegram o Zapya</b> y quien los recibe los abre con Finlay. No hace falta servidor.</p>
+    <a class="btn ancho" href="#/mensajes/nuevo">✉ Nuevo mensaje o entrega</a>
+    ${mensajes.length ? mensajes.map((m) => `<article class="mensaje ${m.enviado ? "enviado" : ""} ${m.leido || m.enviado ? "" : "nuevo"}">
+        <p class="mensaje-cabeza"><b>${m.enviado ? `Tú → ${esc(PARA_TEXTO[m.para] || m.para)}` : esc(m.de.nombre)}</b>
+          ${m.enviado ? "" : `<span class="chip ${m.de.verificado ? "chip-ok" : ""}">${ROL_TEXTO[m.de.rol] || ""}${m.de.verificado ? " ✔" : " · sin verificar"}</span>`}
+          <span class="sub">${new Date(m.fecha).toLocaleDateString("es")}</span></p>
+        ${m.texto ? `<p class="mensaje-texto">${esc(m.texto).replace(/\n/g, "<br>")}</p>` : ""}
+        ${(m.docs || []).filter((id) => docs.has(id)).length ? `<ul class="mensaje-docs">${m.docs.filter((id) => docs.has(id)).map((id) =>
+          `<li><a href="#/doc/${id}">📄 ${esc(docs.get(id).nombre)}</a></li>`).join("")}</ul>` : ""}
+        <button class="btn mini secundario" data-accion="mensaje-borrar" data-id="${esc(m.id)}">Borrar</button>
+      </article>`).join("") : `<div class="panel centro"><p>Todavía no tienes mensajes.</p><p class="sub">Cuando un profesor o el administrador te mande un archivo de Finlay, aparecerá aquí con sus materiales.</p></div>`}`, "#/perfil");
+}
+const PARA_TEXTO = { admin: "Administrador", profesores: "Profesores", estudiantes: "Estudiantes", todos: "Todos" };
+
+async function vistaMensajeNuevo() {
+  const rol = seg.esAdmin() ? "admin" : pref("rol", "estudiante");
+  const docs = (await db.listarDocumentos()).filter((d) => seg.esAdmin() || esPersonal(d))
+    .sort((a, b) => (esPersonal(b) - esPersonal(a)) || b.fecha - a.fecha);
+  const destinos = rol === "admin" ? [["todos", "Todos"], ["estudiantes", "Estudiantes"], ["profesores", "Profesores"]]
+    : rol === "profesor" ? [["admin", "Administrador"], ["estudiantes", "Mis estudiantes"]] : [["admin", "Administrador"], ["profesores", "Mi profesor"]];
+  poner("Nuevo mensaje", `
+    <form class="panel" data-form="mensaje">
+      <label>Para<select name="para">${destinos.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></label>
+      <label>Mensaje<textarea name="texto" rows="4" maxlength="4000" placeholder="${rol === "profesor" ? "Ej.: Entrego la conferencia 5 de Farmacología para su revisión." : "Escribe tu mensaje"}"></textarea></label>
+      <p><b>Materiales que entregas</b> <span class="sub">(opcional)</span></p>
+      ${docs.length ? `<div class="lista-check">${docs.slice(0, 200).map((d) => `<label class="check"><input type="checkbox" name="doc" value="${d.id}">
+          <span>${esc(d.nombre)} <small class="sub">· ${esc(d.asignaturas[0].split("|")[1])}${d.cuestionario?.length ? ` · ${d.cuestionario.length} preg.` : ""}</small></span></label>`).join("")}</div>`
+        : `<p class="sub">No tienes materiales propios. Cárgalos primero con <b>Añadir materiales</b> en la Biblioteca.</p>`}
+      <button class="btn ancho">📤 Crear archivo y enviar</button>
+      <p class="nota">Se crea un archivo de Finlay. Elige WhatsApp, Telegram o Zapya y mándaselo a la persona: al abrirlo con Finlay verá tu mensaje${rol === "admin" ? " <b>firmado como oficial</b>" : rol === "profesor" && pref("profesorOk") ? " con tu sello de <b>profesor verificado</b>" : ""} y los materiales.</p>
+    </form>`, "#/mensajes");
+}
+
+async function enviarMensaje(f) {
+  const ids = [...f.querySelectorAll("input[name=doc]:checked")].map((x) => x.value);
+  const texto = f.texto.value.trim();
+  if (!texto && !ids.length) return alert("Escribe un mensaje o elige al menos un material.");
+  const docs = (await db.listarDocumentos()).filter((d) => ids.includes(d.id));
+  const rol = seg.esAdmin() ? "admin" : pref("rol", "estudiante");
+  const mensaje = { id: "m" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), texto, fecha: Date.now(), para: f.para.value,
+    de: { nombre: pref("nombre") || "Sin nombre", rol, ...(rol === "profesor" && pref("codigoProf") ? { codigo: pref("codigoProf") } : {}) } };
+  await db.guardarMensaje({ ...mensaje, de: { nombre: mensaje.de.nombre, rol, verificado: true }, enviado: true, leido: true, docs: ids });
+  await exportarPaquete(null, false, { docs, mensaje, titulo: `Mensaje de ${mensaje.de.nombre}`, base: `finlay-mensaje-${db.hoy()}-${mensaje.id.slice(-4)}` });
+  location.hash = "#/mensajes";
+  router();
+}
+
+// ---------- Administración (solo con la llave del administrador) ----------
+async function vistaAdmin() {
+  if (!seg.esAdmin()) {
+    return poner("Administración", `
+      <section class="panel centro">
+        <p class="grande">🔑 Acceso del administrador</p>
+        <p>Esta parte es solo para quien administra Finlay. Para entrar hay que cargar el <b>archivo de la llave</b> (finlay-admin.llave).</p>
+        <button class="btn ancho" data-accion="admin-llave">Cargar mi llave</button>
+        <input type="file" id="admin-llave" hidden>
+        <p class="nota">La llave no se puede adivinar ni recuperar: sin ella nadie puede publicar contenido oficial ni crear códigos de profesor.</p>
+      </section>`, "#/perfil");
+  }
+  const docs = (await db.listarDocumentos()).filter(esPersonal).sort((a, b) => b.fecha - a.fecha);
+  const asigs = await db.listarAsignaturas();
+  poner("Administración", `
+    <p class="chip chip-ok">🔑 Modo administrador activo en este teléfono</p>
+    <section class="panel">
+      <p class="grande">👨‍🏫 Código para un profesor</p>
+      <p class="sub">Crea un código y mándaselo al profesor. Al registrarse con él queda como <b>profesor verificado</b>.</p>
+      <form data-form="codigo-prof">
+        <label>Nombre del profesor<input name="nombre" required maxlength="60"></label>
+        <label>Asignatura <span class="sub">(opcional)</span><input name="asignatura" maxlength="80" list="lista-asigs"></label>
+        <button class="btn ancho">Crear código</button>
+      </form>
+      <div id="codigo-salida"></div>
+    </section>
+    <section class="panel">
+      <p class="grande">📚 Generar una asignatura completa</p>
+      <p class="sub">Elige materiales subidos a la app (tuyos o entregados por profesores). Finlay les hace el cuestionario que falte, arma el resumen de la asignatura, la <b>firma como oficial</b> y crea el archivo para repartir.</p>
+      <form data-form="generar-asig">
+        <label>Año<select name="anio">${ANIOS.map((a, i) => `<option value="${i + 1}">${a}</option>`).join("")}</select></label>
+        <label>Nombre de la asignatura<input name="nombre" required maxlength="80" list="lista-asigs" placeholder="Nueva o una que ya existe"></label>
+        <datalist id="lista-asigs">${[...new Set(asigs.map((a) => a.nombre))].map((n) => `<option value="${esc(n)}">`).join("")}</datalist>
+        ${docs.length ? `<div class="lista-check">${docs.map((d) => `<label class="check"><input type="checkbox" name="doc" value="${d.id}">
+            <span>${esc(d.nombre)} <small class="sub">· ${d.de ? "de " + esc(d.de.nombre) : "tuyo"} · ${d.cuestionario?.length ? d.cuestionario.length + " preg." : "sin cuestionario"}</small></span></label>`).join("")}</div>
+          <button class="btn ancho">⚙ Generar, firmar y compartir</button>`
+          : `<p class="sub">No hay materiales subidos. Cárgalos con <b>Añadir materiales</b> o recibe una entrega de un profesor.</p>`}
+      </form>
+    </section>
+    <section class="panel">
+      <p class="grande">📤 Publicar contenido oficial</p>
+      <p class="sub">Todo lo que compartas desde <b>Copia y compartir</b> o <b>Mensajes</b> sale firmado con tu llave: las demás apps lo reconocen como oficial.</p>
+      <a class="btn ancho secundario" href="#/copia">Ir a Copia y compartir</a>
+    </section>
+    <button class="btn ancho peligro" data-accion="admin-salir">Salir del modo administrador en este teléfono</button>`, "#/perfil");
+}
+
+async function generarAsignatura(f) {
+  const ids = [...f.querySelectorAll("input[name=doc]:checked")].map((x) => x.value);
+  if (!ids.length) return alert("Elige al menos un material.");
+  const anio = Number(f.anio.value);
+  const nombre = f.nombre.value.trim().replace(/\|/g, "-");
+  mostrarProgreso("Generando la asignatura…", { titulo: "Generar asignatura", pose: "laptop" });
+  const asig = await db.crearAsignatura(anio, nombre);
+  const todos = await db.listarDocumentos();
+  const docs = ids.map((id) => todos.find((d) => d.id === id)).filter(Boolean);
+  const paraResumen = [];
+  for (const [k, d] of docs.entries()) {
+    const porPagina = new Map();
+    for (const fr of await db.fragmentosDe(d.id)) porPagina.set(fr.pagina, (porPagina.get(fr.pagina) || "") + "\n" + fr.texto);
+    const paginas = [...porPagina].map(([pagina, texto]) => ({ pagina, texto }));
+    if (!d.cuestionario?.length) {
+      const auto = generarCuestionario(d, paginas);
+      if (auto.length) { d.cuestionario = auto; d.cuestionarioAuto = true; }
+    }
+    paraResumen.push({ nombre: d.nombre, definiciones: definicionesDe(d, paginas, 12) });
+    d.asignaturas = [asig.id];
+    d.orden = k + 1;
+    d.tipo = d.tipo === "libro" ? "libro" : "conferencia";
+    delete d.oficial; // en este teléfono ya es contenido oficial
+    d.origen = "paquete";
+    await db.actualizarDocumento(d);
+  }
+  const resumen = { anio, asignatura: nombre, ...resumenDeAsignatura(nombre, paraResumen) };
+  await db.guardarResumenAsignatura(asig.id, resumen);
+  mostrarProgreso(null);
+  await exportarPaquete(null, false, { docs, titulo: `Finlay · ${nombre}`, base: `finlay-asignatura-${normalizar(nombre).trim().replace(/\s+/g, "-")}`,
+    preparar: (p) => { p.resumenesAsignatura = [resumen]; p.asignaturas = [{ anio, nombre, semestre: null }]; } });
+  aviso(`✅ Asignatura «${nombre}» creada con ${docs.length} material${docs.length === 1 ? "" : "es"}`);
+  location.hash = enlaceAsig(asig.id);
+  router();
+}
+
 // ---------- Guía: el Dr. Finlay explica la app paso a paso ----------
 const GUIA = [
   { pose: "saluda", titulo: "¡Hola! Soy el Dr. Finlay", texto: "Te voy a enseñar cómo funciona la app en unos pocos pasos. Todo funciona <b>sin internet</b>: las clases, los cuestionarios y tu progreso viven en tu teléfono.", ir: null },
@@ -2421,6 +2647,10 @@ const AYUDA_PANTALLA = {
     <li><b>Ayuda</b>: la guía completa conmigo.</li></ul>` },
   ajustes: { pose: "brazos", titulo: "Configuración", texto: `<p>Cambia tu <b>nombre</b> y tu <b>foto</b>, el <b>modo oscuro</b> (o automático por la hora), el <b>sonido</b>, el <b>tamaño de letra</b>, tu <b>meta diaria</b> y la <b>voz</b>.</p>` },
   copia: { pose: "laptop", titulo: "Copia de seguridad", texto: `<p>Guarda tu progreso, tus notas y tus materiales en un archivo. Si cambias de teléfono o borras la app, lo cargas y <b>no pierdes nada</b>. También sirve para pasarle materiales a un compañero.</p>` },
+  mensajes: { pose: "laptop", titulo: "Mensajes y entregas", texto: `<ul>
+    <li>Aquí llegan los <b>avisos del administrador</b> y los <b>materiales de tus profesores</b>.</li>
+    <li>Con <b>Nuevo mensaje</b> escribes y adjuntas materiales tuyos: se crea un archivo que mandas por WhatsApp, Telegram o Zapya.</li>
+    <li>El sello ✔ indica que quien lo envía es un <b>profesor verificado</b> o el <b>administrador</b>.</li></ul>` },
   buscar: { pose: "lee", titulo: "El buscador", texto: `<p>Busca una palabra en todas tus clases y conferencias. Arriba filtras por <b>año</b> y tipo; toca un resultado para ir <b>justo a esa parte</b>, con la palabra marcada.</p>` },
   leer: { pose: "lee", titulo: "Modo lectura", texto: `<p>El texto de la conferencia con letra cómoda, página por página. Usa las flechas para avanzar y 🔊 para escucharla.</p>` },
 };
@@ -2520,6 +2750,11 @@ async function guardarMaterial(archivo, paginas, asigId, tipo, nombre = archivo.
   // .ppt y .doc viejos: se guarda el archivo para poder abrirlo en WPS y pasarlo a PDF
   const viejo = ["ppt", "doc"].includes(tipoDeArchivo(archivo.name)) ? tipoDeArchivo(archivo.name) : null;
   if (viejo) doc.viejo = viejo;
+  // Cuestionario automático (borrador) a partir de las definiciones del texto
+  if (tipo !== "libro") {
+    const auto = generarCuestionario(doc, conTexto.map((p) => ({ pagina: p.n, texto: p.texto })));
+    if (auto.length) { doc.cuestionario = auto; doc.cuestionarioAuto = true; }
+  }
   await db.guardarDocumento(doc, fragmentos);
   if (esPdf || original || viejo) await db.guardarArchivo(doc.id, archivo);
   if (!conTexto.length) return `${nombre}: es un PDF escaneado (fotos). Se puede ver, pero el buscador y las tarjetas no funcionan con él.`;
@@ -2737,6 +2972,18 @@ document.addEventListener("submit", async (ev) => {
     const p = doc.cuestionario[i];
     notas.reportar({ material: doc.nombre, docId: doc.id, indice: i, fuente: p.fuente || "", pregunta: String(p.pregunta || "").slice(0, 300), comentario: f.c.value.trim() });
     f.outerHTML = `<p class="sub">✅ Reporte guardado. Envíalo desde Perfil → Copia y compartir.</p>`;
+  } else if (f.dataset.form === "registro") {
+    await guardarRegistro(f);
+  } else if (f.dataset.form === "mensaje") {
+    await enviarMensaje(f);
+  } else if (f.dataset.form === "generar-asig") {
+    if (seg.esAdmin()) await generarAsignatura(f);
+  } else if (f.dataset.form === "codigo-prof") {
+    if (!seg.esAdmin()) return;
+    const codigo = await seg.crearCodigoProfesor(f.nombre.value, f.asignatura.value);
+    document.getElementById("codigo-salida").innerHTML = `<p><b>Código de ${esc(f.nombre.value.trim())}</b> (tócalo para copiarlo):</p>
+      <textarea class="codigo-prof" rows="4" readonly>${esc(codigo)}</textarea>
+      <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar el código</button>`;
   } else if (f.dataset.form === "reto") {
     const r = await leerCodigoDeReto(f.codigo.value);
     if (!r) return alert("Ese código no es válido o no tienes esa asignatura en Finlay.\nRevisa que tu compañero y tú tengan los mismos materiales.");
@@ -2967,6 +3214,48 @@ document.addEventListener("click", async (ev) => {
       await db.borrarRespuestas(vistaDoc.doc.id);
       router();
     }
+  } else if (accion === "quitar-pregunta") {
+    const { doc, i } = enPantalla[Number(b.dataset.i)];
+    if (!confirm("¿Quitar esta pregunta de tu cuestionario?\nNo saldrá más en el cuestionario, el repaso ni los exámenes. Puedes restaurarla después.")) return;
+    const real = await db.obtenerDocumento(doc.id);
+    real.cuestionario[i] = { ...real.cuestionario[i], oculta: true };
+    await db.actualizarDocumento(real);
+    aviso("🗑 Pregunta quitada");
+    router();
+  } else if (accion === "restaurar-preguntas") {
+    const real = await db.obtenerDocumento(vistaDoc.doc.id);
+    real.cuestionario = real.cuestionario.map(({ oculta, ...p }) => p);
+    await db.actualizarDocumento(real);
+    router();
+  } else if (accion === "generar-cuestionario") {
+    const doc = await db.obtenerDocumento(b.dataset.id);
+    const porPagina = new Map();
+    for (const fr of await db.fragmentosDe(doc.id)) porPagina.set(fr.pagina, (porPagina.get(fr.pagina) || "") + "\n" + fr.texto);
+    const auto = generarCuestionario(doc, [...porPagina].map(([pagina, texto]) => ({ pagina, texto })));
+    if (!auto.length) return alert("No encontré suficientes definiciones en el texto para hacer preguntas.\nFunciona mejor con conferencias que definen conceptos («La mitosis es…»).");
+    doc.cuestionario = auto;
+    doc.cuestionarioAuto = true;
+    await db.actualizarDocumento(doc);
+    aviso(`⚙ ${auto.length} preguntas generadas`);
+    router();
+  } else if (accion === "mensaje-borrar") {
+    if (confirm("¿Borrar este mensaje? Los materiales se quedan en tu biblioteca.")) { await db.borrarMensaje(b.dataset.id); router(); }
+  } else if (accion === "admin-llave") {
+    const entrada = document.getElementById("admin-llave");
+    entrada.onchange = async () => {
+      try {
+        await seg.cargarLlave(await entrada.files[0].text());
+        aviso("🔑 Modo administrador activado");
+        router();
+      } catch (e) { alert(e.message); }
+    };
+    entrada.click();
+  } else if (accion === "admin-salir") {
+    if (confirm("¿Salir del modo administrador?\nPara volver a entrar necesitarás el archivo de tu llave.")) { seg.quitarLlave(); location.hash = "#/perfil"; router(); }
+  } else if (accion === "codigo-compartir") {
+    const codigo = document.querySelector(".codigo-prof")?.value || "";
+    await compartirArchivo(`codigo-profesor-${normalizar(b.dataset.nombre).trim().replace(/\s+/g, "-")}.txt`,
+      `Código de profesor de Finlay para ${b.dataset.nombre}:\n\n${codigo}\n\nCópialo completo y pégalo en Finlay al registrarte como profesor.`, "text/plain");
   }
 });
 
@@ -2978,10 +3267,18 @@ async function cargarPaquete(archivo) {
     mostrarProgreso("Leyendo el paquete…");
     const datos = await leerPaquete(archivo);
     if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
-    const r = await importarPaquete(datos, mostrarProgreso);
+    const r = await importarPaquete(datos, mostrarProgreso, { marcarNuevo: true });
     mostrarProgreso(null);
+    if (r.mensaje) {
+      await db.guardarMensaje({ ...r.mensaje, recibido: Date.now(), leido: false, docs: r.docs });
+      aviso(`📩 Mensaje de ${r.mensaje.de.nombre}${r.docs.length ? ` con ${r.docs.length} material${r.docs.length === 1 ? "" : "es"}` : ""}`);
+      location.hash = "#/mensajes";
+      return router();
+    }
     alert(
-      `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n\n` +
+      `✅ Paquete cargado${datos.titulo ? `: ${datos.titulo}` : ""}\n` +
+      (r.oficial ? "✔ Oficial: firmado por el administrador de Finlay\n\n" : "⚠ No oficial (sin la firma del administrador): se añade como material personal\n\n") +
+      (r.omitidos ? `• No se cambiaron ${r.omitidos} materiales oficiales\n` : "") +
       (r.asignaturas ? `• Asignaturas: ${r.asignaturas}\n` : "") +
       (r.quitadas ? `• Asignaturas quitadas: ${r.quitadas.join(", ")}\n` : "") +
       (r.imagenes ? `• Imágenes: ${r.imagenes}\n` : "") +
@@ -3153,6 +3450,10 @@ async function router() {
     else if (partes[0] === "plan") await vistaPlan(Number(partes[1]));
     else if (partes[0] === "copia") await vistaCopia();
     else if (partes[0] === "ayuda") vistaAyuda(partes[1]);
+    else if (partes[0] === "registro") vistaRegistro();
+    else if (partes[0] === "mensajes") await (partes[1] === "nuevo" ? vistaMensajeNuevo() : vistaMensajes());
+    else if (partes[0] === "admin") await vistaAdmin();
+    else if (!pref("rol")) vistaRegistro(); // la primera vez: registrarse como estudiante o profesor
     else await vistaInicio();
     doctorDePantalla(partes[0] === "doc" ? "doc-" + (vistaDoc.pestanaActual || "conferencia") : partes[0] || "inicio");
   } catch (e) {
@@ -3174,7 +3475,7 @@ tiempo.iniciarRegistro();
   revisarLogros(false); // los logros de antes se guardan sin llenar la pantalla de avisos
 })();
 window.addEventListener("hashchange", router);
-router().then(quitarArranque, quitarArranque).then(cargarPaquetesIncluidos).then(recogerRecibidos);
+seg.iniciar().catch(() => false).then(router).then(quitarArranque, quitarArranque).then(cargarPaquetesIncluidos).then(recogerRecibidos);
 
 // En el APK pueden venir paquetes dentro de la app: se cargan solos la primera vez
 async function cargarPaquetesIncluidos() {
@@ -3206,7 +3507,7 @@ async function cargarPaquetesIncluidos() {
         const dentro = m ? Math.min(1, Number(m[1]) / Number(m[2])) : 0;
         const nombre = (t.split("\n").slice(1).join(" ") || t).replace(/^Clase Finlay - /, "");
         mostrarProgreso(nombre, { ...op, pct: (i + dentro * 0.98) / pendientes.length });
-      });
+      }, { confiable: true }); // lo que viene dentro de la app es oficial
       hechos[p.archivo] = p.version;
       try { localStorage.setItem("finlay.incluidos", JSON.stringify(hechos)); } catch {}
     }
