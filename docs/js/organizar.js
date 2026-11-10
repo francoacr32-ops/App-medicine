@@ -54,10 +54,12 @@ export const LIBROS = [
 
 /** Catálogo de la Editorial Ciencias Médicas (ECIMED): allí se descargan los libros (se necesita internet) */
 export const ECIMED_CATALOGO = "https://omp.sld.cu/index.php/ecimed/catalog";
-/** Enlace que busca el libro en el catálogo de ECIMED */
+/**
+ * Enlace para descargar un libro. Si se conoce su página exacta en el catálogo (libro.enlace), va directo;
+ * si no, abre la portada del catálogo de ECIMED, donde se busca por el título.
+ */
 export function enlaceEcimed(libro) {
-  const titulo = String(libro.titulo).replace(/\s*\(.*?\)\s*/g, " ").trim();
-  return `${ECIMED_CATALOGO}/search?query=${encodeURIComponent(titulo)}`;
+  return libro.enlace || ECIMED_CATALOGO;
 }
 /** Libros de texto de una asignatura (por su nombre) */
 export function librosDe(nombreAsignatura) {

@@ -873,7 +873,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.5 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.6 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1084,7 +1084,7 @@ async function vistaAsignatura(id, pestana = "conferencias") {
      <ul class="docs">${items || `<li class="vacio">No hay ${tipo === "libro" ? "libros" : "conferencias"} todavía.</li>`}</ul>
      ${tipo === "libro" && organizar.librosDe(asig.nombre).length ? `<section class="libros-texto"><p class="grande">${ico("libro")} Libros de texto (ECIMED)</p>
        ${organizar.librosDe(asig.nombre).map(htmlLibroEcimed).join("")}
-       <p class="nota">Toca <b>Descargar</b> para abrir el libro en el catálogo de ECIMED (necesitas internet). Cuando tengas el PDF, toca <b>Añadir materiales</b> en la Biblioteca: Finlay lo reconoce y lo pone aquí solo.</p>
+       <p class="nota">El botón abre el catálogo de ECIMED (necesitas internet): busca allí el título y descarga el PDF. Cuando tengas el PDF, toca <b>Añadir materiales</b> en la Biblioteca: Finlay lo reconoce y lo pone aquí solo.</p>
        <button class="btn ancho secundario" data-accion="anadir">${ico("cargar")} Añadir un libro</button></section>` : ""}
      <button class="btn ancho solo-manual" data-accion="cargar" data-asig="${esc(id)}" data-tipo="${tipo}">
        ＋ Cargar ${tipo === "libro" ? "libros" : "conferencias"} (PDF, Word, PowerPoint)</button>
@@ -1346,7 +1346,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
 /** Un libro de texto con su botón para descargarlo en el catálogo de ECIMED */
 function htmlLibroEcimed(l) {
   return `<div class="libro-texto"><span class="libro-texto-info"><b>${esc(l.titulo)}</b><span class="sub">${esc(l.autor)}${l.porConfirmar ? " · por confirmar" : ""}</span></span>
-    <a class="btn mini" href="${organizar.enlaceEcimed(l)}" target="_blank" rel="noopener">⬇ Descargar</a></div>`;
+    <a class="btn mini" href="${organizar.enlaceEcimed(l)}" target="_blank" rel="noopener">${l.enlace ? "⬇ Descargar" : "🔎 Buscar en ECIMED"}</a></div>`;
 }
 
 /** Dibuja el Word o PowerPoint guardado y le pone el zoom; si falla, ofrece el texto */
@@ -2321,7 +2321,7 @@ async function vistaBiblioteca(filtro = "todo", consulta = "") {
     <button class="btn-anadir" data-accion="anadir">${ico("cargar")}<span><b>Añadir materiales</b><small>PDF, PowerPoint o Word: Finlay los organiza solo</small></span></button>
     ${filtro === "libro" ? `<section class="libros-texto ecimed">
       <p class="grande">${ico("libro")} Libros de texto de la carrera (ECIMED)</p>
-      <p class="sub">Descárgalos gratis desde el catálogo de la Editorial Ciencias Médicas (necesitas internet; está en la red de Infomed). Luego cárgalos con <b>Añadir materiales</b>.</p>
+      <p class="sub">Se descargan gratis del catálogo de la Editorial Ciencias Médicas (necesitas internet). El botón abre el catálogo: escribe el título del libro en su buscador, entra al libro y toca <b>PDF</b>. Luego cárgalo aquí con <b>Añadir materiales</b>.</p>
       ${organizar.LIBROS.filter((l) => !asigFiltro || organizar.librosDe(asigFiltro.split("|")[1] || "").includes(l)).map(htmlLibroEcimed).join("")}
       <a class="btn ancho secundario" href="${organizar.ECIMED_CATALOGO}" target="_blank" rel="noopener">${ico("libro")} Ver todo el catálogo de ECIMED</a></section>` : ""}
     ${asigFiltro ? `<p class="filtro-activo">${ico("ajustes2")} ${esc(asigsConDocs.find((a) => a.id === asigFiltro)?.nombre || "")} · <a href="${enlace(filtro, { asig: "" })}">Quitar filtro</a></p>` : ""}
