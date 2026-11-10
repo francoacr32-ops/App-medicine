@@ -293,7 +293,8 @@ async function vistaInicio() {
         <label class="bienvenida-nombre" for="aj-nombre">¿Cómo te llamas?
           <input id="aj-nombre" value="${esc(nombre)}" maxlength="30" placeholder="Escribe tu nombre" autocomplete="given-name">
         </label>
-        <button class="btn btn-repasar solo-manual" data-accion="paquete">${ico("cargar")}<span>Cargar paquete de Claude</span>${ico("chevron")}</button>
+        <button class="btn btn-repasar solo-manual" data-accion="paquete">${ico("cargar")}<span>Cargar las clases (archivo de Finlay)</span>${ico("chevron")}</button>
+        <p class="sub solo-manual">Pídele a quien te pasó Finlay el archivo <b>Finlay-clases-completas.zip</b>, guárdalo en tu teléfono y elígelo aquí.</p>
         <a class="btn secundario btn-explorar" href="#/temas">Explorar los temas</a>
         ${pref("guiaVista") ? "" : `<a class="tarjeta guia-tarjeta" href="#/ayuda/0"><img src="iconos/doctor/saluda.webp" alt="">
       <span><b>¿Primera vez en Finlay?</b><small>El Dr. Finlay te enseña la app en 2 minutos</small></span>${ico("chevron", "flecha-der")}</a>`}
@@ -872,7 +873,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.4 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.5 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -3296,7 +3297,7 @@ async function cargarPaquete(archivo) {
     mostrarProgreso("Leyendo el paquete…");
     const datos = await leerPaquete(archivo);
     if (navigator.storage?.persist) navigator.storage.persist().catch(() => {});
-    const r = await importarPaquete(datos, mostrarProgreso, { marcarNuevo: true });
+    const r = await importarPaquete(datos, mostrarProgreso, { marcarNuevo: datos.materiales.length <= 20 });
     mostrarProgreso(null);
     if (r.mensaje) {
       await db.guardarMensaje({ ...r.mensaje, recibido: Date.now(), leido: false, docs: r.docs });

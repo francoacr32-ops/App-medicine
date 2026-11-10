@@ -62,7 +62,7 @@ function mejorPasaje(texto, pesos) {
     const norm = normalizar(o.texto);
     let s = 0;
     for (const [termino, peso] of pesos) {
-      if (new RegExp(`(?<![a-z0-9])${escRegex(termino)}`).test(norm)) s += peso;
+      if (new RegExp(`\\b${escRegex(termino)}`).test(norm)) s += peso;
     }
     return s;
   });

@@ -42,7 +42,7 @@ export function tarjetasDeDefiniciones(doc, paginas, maximo = 40) {
   const VERBO = /^(.{3,70}?)\s+(es|son|se define como|se definen como|se denomina|se denominan|consiste en|constituye|constituyen)\s+(.{15,240})$/i;
   const DOS_PUNTOS = /^([A-ZÁÉÍÓÚÑ][\wáéíóúñü ,()/-]{2,55}):\s+(.{15,240})$/;
   for (const { pagina, texto } of paginas) {
-    const frases = String(texto).split(/\n+|(?<=[.;])\s+(?=[A-ZÁÉÍÓÚÑ¿])/).map(limpiar).filter((f) => f.length > 20);
+    const frases = String(texto).replace(/([.;])\s+(?=[A-ZÁÉÍÓÚÑ¿])/g, "$1\n").split(/\n+/).map(limpiar).filter((f) => f.length > 20);
     for (const f of frases) {
       if (salida.length >= maximo) return salida;
       let termino, explicacion, verbo;

@@ -1,6 +1,6 @@
 // Permite abrir Finlay sin conexión y ahorra datos: los archivos se guardan en el teléfono.
 
-const VERSION = "finlay-v57";
+const VERSION = "finlay-v58";
 const BASICOS = [
   "./",
   "index.html",
@@ -63,6 +63,36 @@ const BASICOS = [
   "js/tarjetas.js",
   "js/notas.js",
   "js/leccion.js",
+  "js/original.js",
+  "js/viejos.js",
+  "js/seguridad.js",
+  "js/generar.js",
+  "lib/jszip.min.js",
+  "lib/pdf.min.mjs",
+  "lib/pdf.worker.min.mjs",
+  "lib/docx-preview.min.js",
+  "lib/cfb.min.js",
+  "lib/pptx-preview.umd.js",
+  "iconos/icono-180.png",
+  "iconos/doctor/abrazo.webp",
+  "iconos/doctor/brazos.webp",
+  "iconos/doctor/carpeta.webp",
+  "iconos/doctor/celebra.webp",
+  "iconos/doctor/corazon.webp",
+  "iconos/doctor/dedo.webp",
+  "iconos/doctor/idea.webp",
+  "iconos/doctor/laptop.webp",
+  "iconos/doctor/lee.webp",
+  "iconos/doctor/libros.webp",
+  "iconos/doctor/mochila.webp",
+  "iconos/doctor/piensa.webp",
+  "iconos/doctor/pulgar.webp",
+  "iconos/doctor/puntero.webp",
+  "iconos/doctor/salta.webp",
+  "iconos/doctor/saluda.webp",
+  "iconos/doctor/sentado.webp",
+  "iconos/doctor/victoria.webp",
+  "iconos/asig/otorrino.webp",
 ];
 
 self.addEventListener("install", (e) => {

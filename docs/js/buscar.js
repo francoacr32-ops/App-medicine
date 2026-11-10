@@ -9,7 +9,7 @@ function escaparRegex(s) {
 
 /** Crea una expresión que encuentra palabras que EMPIEZAN por el término. */
 function patron(termino) {
-  return new RegExp(`(?<![a-z0-9])${escaparRegex(termino)}[a-z0-9]*`, "g");
+  return new RegExp(`\\b${escaparRegex(termino)}[a-z0-9]*`, "g"); // \b y no una búsqueda hacia atrás: los iPhone viejos no la entienden
 }
 
 /**
