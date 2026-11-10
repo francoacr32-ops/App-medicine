@@ -43,7 +43,7 @@ TIPOS_RECIBIDOS = [
     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-powerpoint", "application/msword",
-    "application/zip", "application/x-zip-compressed", "application/octet-stream", "application/json",
+    "application/zip", "application/x-zip-compressed", "application/octet-stream", "application/json", "text/plain",
 ]
 NS_ANDROID = "http://schemas.android.com/apk/res/android"
 TEMA = 0x01030241          # @android:style/Theme.Material.Light.NoActionBar

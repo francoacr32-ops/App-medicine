@@ -123,7 +123,18 @@ public class Principal extends Activity {
         } catch (Exception e) {
             return;
         }
-        if (uris.isEmpty()) return;
+        if (uris.isEmpty()) {
+            // Texto compartido (por ejemplo, el código de profesor desde un mensaje de WhatsApp)
+            String texto = Intent.ACTION_SEND.equals(accion) ? intent.getStringExtra(Intent.EXTRA_TEXT) : null;
+            if (texto == null || texto.trim().isEmpty()) return;
+            try {
+                org.json.JSONObject o = new org.json.JSONObject();
+                o.put("texto", texto);
+                synchronized (recibidos) { recibidos.add(o.toString()); }
+                web.evaluateJavascript("window.__finlayRecibidos && window.__finlayRecibidos()", null);
+            } catch (Exception e) { }
+            return;
+        }
         Toast.makeText(this, "📥 Recibiendo " + uris.size() + (uris.size() == 1 ? " archivo…" : " archivos…"), Toast.LENGTH_SHORT).show();
         // Se copian ya (el permiso para leerlos dura poco) y en segundo plano (pueden pesar mucho)
         new Thread(new Runnable() {

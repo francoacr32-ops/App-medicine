@@ -872,7 +872,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.3 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.4 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -2369,6 +2369,7 @@ function vistaRegistro() {
         <label data-solo="estudiante">¿En qué año estás?<select name="anio">${ANIOS.map((a, i) => `<option value="${i + 1}" ${Number(pref("anioEst", "1")) === i + 1 ? "selected" : ""}>${a}</option>`).join("")}</select></label>
         <label data-solo="profesor" hidden>Código de profesor (te lo da el administrador)
           <textarea name="codigo" rows="3" placeholder="PROF.…" autocomplete="off">${esc(pref("codigoProf"))}</textarea>
+          <button type="button" class="btn mini secundario" data-accion="pegar-codigo">📋 Pegar el código copiado</button>
           <small class="sub">Si todavía no lo tienes, déjalo vacío: lo puedes poner después aquí mismo (Perfil → tu rol).</small></label>
         <button class="btn ancho">Entrar</button>
       </form>
@@ -2396,6 +2397,20 @@ async function guardarRegistro(f) {
   if (rol === "estudiante") guardarPref("anioEst", f.anio.value);
   aviso(rol === "profesor" ? (codigo ? "✔ Profesor verificado" : "Registrado como profesor (sin verificar)") : "✅ ¡Listo!");
   location.hash = pref("guiaVista") ? "#/" : "#/ayuda/0";
+  router();
+}
+
+/** Busca un código de profesor dentro de un texto (un mensaje de WhatsApp) y, si es válido, verifica al profesor */
+async function recibirCodigoProfesor(texto) {
+  const m = String(texto).match(/PROF\.[\w-]+\.[\w-]+/);
+  const datos = m && (await seg.leerCodigoProfesor(m[0]));
+  if (!datos) return alert("Ese texto no trae un código de profesor válido.\nComparte el mensaje completo que te mandó el administrador.");
+  guardarPref("codigoProf", m[0]);
+  guardarPref("profesorOk", "1");
+  guardarPref("rol", "profesor");
+  if (!pref("nombre")) guardarPref("nombre", datos.nombre);
+  alert(`✔ ¡Verificado!\n\n${datos.nombre}, ya eres profesor verificado en Finlay${datos.asignatura ? ` (${datos.asignatura})` : ""}.\nTus entregas saldrán con tu sello.`);
+  location.hash = "#/perfil";
   router();
 }
 
@@ -2477,6 +2492,7 @@ async function vistaAdmin() {
       <form data-form="codigo-prof">
         <label>Nombre del profesor<input name="nombre" required maxlength="60"></label>
         <label>Asignatura <span class="sub">(opcional)</span><input name="asignatura" maxlength="80" list="lista-asigs"></label>
+        <label>WhatsApp del profesor <span class="sub">(opcional, con el código del país: 53…)</span><input name="telefono" type="tel" inputmode="numeric" maxlength="20" placeholder="5351234567"></label>
         <button class="btn ancho">Crear código</button>
       </form>
       <div id="codigo-salida"></div>
@@ -2500,6 +2516,13 @@ async function vistaAdmin() {
       <a class="btn ancho secundario" href="#/copia">Ir a Copia y compartir</a>
     </section>
     <button class="btn ancho peligro" data-accion="admin-salir">Salir del modo administrador en este teléfono</button>`, "#/perfil");
+}
+
+/** Mensaje que recibe el profesor con su código y cómo usarlo */
+function textoCodigo(nombre, codigo) {
+  return `Hola, ${nombre}. Este es tu código de profesor de Finlay:\n\n${codigo}\n\n` +
+    `Para verificarte: mantén el dedo sobre este mensaje, toca Compartir (o Reenviar ↗) y elige Finlay.\n` +
+    `También puedes copiarlo y pegarlo en Finlay: Perfil → Mi registro → Profesor.`;
 }
 
 async function generarAsignatura(f) {
@@ -2983,7 +3006,8 @@ document.addEventListener("submit", async (ev) => {
     const codigo = await seg.crearCodigoProfesor(f.nombre.value, f.asignatura.value);
     document.getElementById("codigo-salida").innerHTML = `<p><b>Código de ${esc(f.nombre.value.trim())}</b> (tócalo para copiarlo):</p>
       <textarea class="codigo-prof" rows="4" readonly>${esc(codigo)}</textarea>
-      <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar el código</button>`;
+      <a class="btn ancho btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${f.telefono.value.replace(/\D/g, "")}?text=${encodeURIComponent(textoCodigo(f.nombre.value.trim(), codigo))}">📲 Enviar por WhatsApp${f.telefono.value.replace(/\D/g, "") ? "" : " (elegir el chat)"}</a>
+      <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar por otra app</button>`;
   } else if (f.dataset.form === "reto") {
     const r = await leerCodigoDeReto(f.codigo.value);
     if (!r) return alert("Ese código no es válido o no tienes esa asignatura en Finlay.\nRevisa que tu compañero y tú tengan los mismos materiales.");
@@ -3238,6 +3262,12 @@ document.addEventListener("click", async (ev) => {
     await db.actualizarDocumento(doc);
     aviso(`⚙ ${auto.length} preguntas generadas`);
     router();
+  } else if (accion === "pegar-codigo") {
+    try {
+      const t = (await navigator.clipboard.readText()).match(/PROF\.[\w-]+\.[\w-]+/);
+      if (!t) return alert("No encontré un código de profesor en lo que copiaste.");
+      b.closest("form").codigo.value = t[0];
+    } catch { alert("Mantén el dedo en el cuadro del código y toca «Pegar»."); }
   } else if (accion === "mensaje-borrar") {
     if (confirm("¿Borrar este mensaje? Los materiales se quedan en tu biblioteca.")) { await db.borrarMensaje(b.dataset.id); router(); }
   } else if (accion === "admin-llave") {
@@ -3254,8 +3284,7 @@ document.addEventListener("click", async (ev) => {
     if (confirm("¿Salir del modo administrador?\nPara volver a entrar necesitarás el archivo de tu llave.")) { seg.quitarLlave(); location.hash = "#/perfil"; router(); }
   } else if (accion === "codigo-compartir") {
     const codigo = document.querySelector(".codigo-prof")?.value || "";
-    await compartirArchivo(`codigo-profesor-${normalizar(b.dataset.nombre).trim().replace(/\s+/g, "-")}.txt`,
-      `Código de profesor de Finlay para ${b.dataset.nombre}:\n\n${codigo}\n\nCópialo completo y pégalo en Finlay al registrarte como profesor.`, "text/plain");
+    await compartirArchivo(`codigo-profesor-${normalizar(b.dataset.nombre).trim().replace(/\s+/g, "-")}.txt`, textoCodigo(b.dataset.nombre, codigo), "text/plain");
   }
 });
 
@@ -3302,6 +3331,10 @@ async function recogerRecibidos() {
   if (!window.FinlayAndroid?.tomarRecibidos || recibiendo || preparandoPaquetes) return;
   let lista;
   try { lista = JSON.parse(window.FinlayAndroid.tomarRecibidos() || "[]"); } catch { return; }
+  if (!lista.length) return;
+  // Texto compartido: si trae un código de profesor, se verifica solo
+  for (const r of lista.filter((x) => x.texto)) await recibirCodigoProfesor(r.texto);
+  lista = lista.filter((x) => !x.texto);
   if (!lista.length) return;
   recibiendo = true;
   try {
