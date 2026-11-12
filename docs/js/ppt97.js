@@ -539,8 +539,13 @@ export function leerPpt(CFB, datos, hacerUrl) {
     let dentro = "";
     if (pib) {
       const url = imagen(pib);
-      dentro += url ? `<img src="${url}" alt="" style="position:absolute;left:0;top:0;width:100%;height:100%${volteoH || volteoV ? `;transform:scale(${volteoH ? -1 : 1},${volteoV ? -1 : 1})` : ""}">`
-        : `<div class="ppt-sin-imagen">imagen</div>`;
+      // Recorte hecho en PowerPoint: fracción de la imagen que se esconde por cada lado
+      const rec = [0x100, 0x101, 0x102, 0x103].map((id) => Math.max(-0.9, Math.min(0.95, (prop(id, 0) | 0) / 65536)));
+      const [rArr, rAba, rIzq, rDer] = rec;
+      const visW = Math.max(0.05, 1 - rIzq - rDer), visH = Math.max(0.05, 1 - rArr - rAba);
+      const recortada = rec.some((x) => x !== 0);
+      const img = `<img src="${url}" alt="" style="position:absolute;left:${n2((-rIzq / visW) * 100)}%;top:${n2((-rArr / visH) * 100)}%;width:${n2(100 / visW)}%;height:${n2(100 / visH)}%;max-width:none${volteoH || volteoV ? `;transform:scale(${volteoH ? -1 : 1},${volteoV ? -1 : 1})` : ""}">`;
+      dentro += !url ? `<div class="ppt-sin-imagen">imagen</div>` : recortada ? `<div style="position:absolute;inset:0;overflow:hidden">${img}</div>` : img;
     }
     let tipo = f.tipo;
     let libre = tipo === 0 || tipo === 100 || tipo === 4095; // figura a mano alzada o sin tipo
