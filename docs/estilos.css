@@ -1527,3 +1527,15 @@ html, body { overflow-x: clip; }
   color: var(--suave); font: inherit; font-size: .8rem; }
 .aviso-auto { padding: 8px 12px; border-radius: 10px; background: var(--naranja-suave); color: #5a3a00; }
 .btn-whatsapp { background: #1fa855; border-color: #1fa855; color: #fff; text-align: center; justify-content: center; margin-top: 8px; }
+
+/* Prueba en grupo */
+.btn-grupo { display: block; width: 100%; text-align: center; margin: 8px 0 10px; }
+.pasos-prueba { margin: 8px 0 14px; padding-left: 1.3em; line-height: 1.5; }
+.pasos-prueba li { margin-bottom: 6px; }
+.prueba-fila { display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: inherit; }
+.sala-prueba .btn { margin-top: 10px; }
+.hora-prueba { font-size: 1.25em; color: var(--acento, #0d9aa5); }
+.cuenta-prueba { font-size: 3.2rem; font-weight: 800; letter-spacing: 1px; margin: 10px 0; font-variant-numeric: tabular-nums; }
+.cuenta-prueba.ya-casi { color: #e5484d; animation: late-prueba .5s ease-in-out infinite alternate; }
+@keyframes late-prueba { from { transform: scale(1); } to { transform: scale(1.12); } }
+.form-prueba input[type=time], .form-prueba input[name=titulo] { width: 100%; }

@@ -9,7 +9,7 @@ import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
-import { NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata, mezclarDocumento } from "./cuestionario.js";
+import { errorEnPregunta, NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata, mezclarDocumento } from "./cuestionario.js";
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
@@ -775,6 +775,7 @@ async function vistaEvaluaciones() {
     ${tarjeta("#/examen", "ev-examen", "#2f7ff0", "Examen de práctica", "Con cronómetro y nota de 2 a 5")}
     ${tarjeta("#/tarjetas", "emoji:🗂️", "#13bfa0", "Tarjetas de memoria", "Repaso rápido: pregunta por un lado, respuesta por el otro")}
     ${tarjeta("#/examen/reto", "emoji:🤝", "#f2962e", "Reto con un compañero", "El mismo examen para los dos, con un código")}
+    ${tarjeta("#/pruebas", "emoji:👥", "#e0559b", "Prueba en grupo", "Todos a la misma hora, por WhatsApp o Zapya")}
     ${tarjeta("#/planes", "ev-plan", "#9b4fe0", "Plan para el examen", planes.length ? `${esc(planes[0].nombre)}: ${textoDias(diasHasta(planes[0].fecha))}` : "Pon la fecha de tu próxima prueba")}
     <div class="titulo-seccion"><h2>Tus últimas notas</h2>${examenes.length ? `<a class="pildora-enlace" href="#/examen">Ver historial ${ico("chevron")}</a>` : ""}</div>
     ${examenes.length ? examenes.slice(0, 3).map((e) => `<div class="nota-tarjeta n${e.nota}">
@@ -873,7 +874,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.7 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.8 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1103,6 +1104,8 @@ async function vistaAsignatura(id, pestana = "conferencias") {
 // ---------- Pantalla: resultados de búsqueda ----------
 async function documentosDelAmbito(ambito) {
   if (ambito === "todo") return db.listarDocumentos();
+  if (ambito.startsWith("prueba:")) return [docDePrueba(ambito.slice(7))].filter(Boolean);
+  if (ambito.startsWith("d:")) return [await db.obtenerDocumento(ambito.slice(2))].filter(Boolean);
   if (ambito.startsWith("anio:")) {
     const anio = Number(ambito.slice(5));
     return (await db.listarDocumentos()).filter((d) => d.asignaturas.some((a) => a.startsWith(anio + "|")));
@@ -1112,6 +1115,7 @@ async function documentosDelAmbito(ambito) {
 
 function nombreAmbito(ambito) {
   if (ambito === "todo") return "toda la carrera";
+  if (ambito.startsWith("prueba:")) return leerPruebas()[ambito.slice(7)]?.titulo || "prueba en grupo";
   if (ambito.startsWith("anio:")) return ANIOS[Number(ambito.slice(5)) - 1];
   return nombreAsig(ambito);
 }
@@ -1714,6 +1718,7 @@ async function htmlCuestionario(doc) {
   const bien = [...resp.values()].filter((r) => r.ultima).length;
   return `<p class="marcador" id="marcador">Respondidas ${Math.min(resp.size, totalVisibles)} de ${totalVisibles} · Correctas ${bien}</p>
     ${doc.cuestionarioAuto ? `<p class="nota aviso-auto">⚙ Cuestionario automático (borrador): Finlay lo hizo solo con el contenido de la conferencia. Si una pregunta está mal, quítala con 🗑.</p>` : ""}
+    <a class="btn mini secundario btn-grupo" href="#/prueba-nueva/${encodeURIComponent("d:" + doc.id)}">👥 Hacer esta prueba en grupo (WhatsApp o Zapya)</a>
     <div class="chips">${chips}</div>
     ${visibles.map(({ i }) => htmlTarjeta(i, resp.get(i))).join("") ||
       `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
@@ -1800,6 +1805,12 @@ async function vistaExamenInicio(ambitoInicial) {
           <button class="btn ancho secundario" data-accion="reto-crear">Crear un reto con lo elegido arriba</button>
           <form class="fila-reto" data-form="reto"><input name="codigo" placeholder="Escribe el código del reto" autocomplete="off" required><button class="btn">Aceptar</button></form>
         </section>
+        <section class="panel reto">
+          <p class="grande">👥 Prueba en grupo</p>
+          <p class="sub">Mándale la prueba a tu grupo por <b>WhatsApp o Zapya</b> y <b>empiecen todos a la misma hora</b>. No hace falta que tengan los mismos materiales: las preguntas van dentro del archivo.</p>
+          <button class="btn ancho secundario" data-accion="prueba-crear">Crear una prueba con lo elegido arriba</button>
+          <a class="btn ancho secundario" href="#/pruebas">Ver mis pruebas en grupo</a>
+        </section>
         <p class="nota">Si quitas «Corregir al momento», el examen es como el real: no sabes si fallaste hasta entregar. Nota según la escala cubana: 5 Excelente (90 % o más), 4 Bien (80 %), 3 Aprobado (70 %), 2 Desaprobado.</p>
         ${historial.length ? `<h2>Tus últimos exámenes</h2><ul class="docs">${historial
           .map((e) => `<li class="doc"><span><b class="nota-num n${e.nota}">${e.nota}</b> ${esc(e.titulo)}</span>
@@ -1822,12 +1833,17 @@ async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   resultadosExamen.clear();
   const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length).map(mezclarDocumento);
   // En un reto, el orden sale del código: los dos teléfonos eligen las mismas preguntas
-  const lista = vistaExamen.reto ? preguntasDelReto(docs, cantidad, vistaExamen.reto) : preguntasDeExamen(docs, cantidad);
+  // En una prueba en grupo todos reciben las mismas preguntas, en el mismo orden
+  const prueba = ambito.startsWith("prueba:") ? leerPruebas()[ambito.slice(7)] : null;
+  vistaExamen.prueba = prueba;
+  vistaExamen.empezo = Date.now();
+  const lista = prueba ? (docs[0]?.cuestionario || []).map((_, i) => ({ doc: docs[0], i }))
+    : vistaExamen.reto ? preguntasDelReto(docs, cantidad, vistaExamen.reto) : preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
   modo = "examen";
   enPantalla = lista;
   elegidasExamen.clear();
-  const titulo = `${vistaExamen.reto ? "Reto" : "Examen"} de ${nombreAmbito(ambito)}`;
+  const titulo = prueba ? `Prueba en grupo: ${prueba.titulo}` : `${vistaExamen.reto ? "Reto" : "Examen"} de ${nombreAmbito(ambito)}`;
   alResponder = () => contarExamen();
   poner(
     "Examen",
@@ -1843,7 +1859,9 @@ async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   iniciarSesion(true);
   vistaExamen.datos = { titulo, ambito, lista };
   if (conReloj) {
-    let segundos = lista.length * 90;
+    // Prueba en grupo: todos terminan a la misma hora (quien entra tarde tiene menos tiempo)
+    const finGrupo = prueba && !prueba.practica ? prueba.inicio + prueba.minutos * 60000 : 0;
+    let segundos = finGrupo > Date.now() ? Math.max(10, Math.round((finGrupo - Date.now()) / 1000)) : prueba ? Math.round(prueba.minutos * 60) : lista.length * 90;
     const pintar = () => {
       const r = document.getElementById("reloj");
       if (r) r.textContent = `⏱ ${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
@@ -1912,6 +1930,7 @@ async function entregarExamen() {
     pa.total++;
     porAsignatura.set(asig, pa);
     if (!resultadosExamen.has(k) || p.tipo === "abierta") mostrarCorreccion(k, r, sinResponder);
+    if (doc.prueba) continue; // las preguntas de una prueba en grupo no son de ningún material del teléfono
     await db.guardarRespuesta(doc.id, i, r.correcta);
     if (!r.correcta) fallados.set(doc.id, { doc, n: (fallados.get(doc.id)?.n || 0) + 1 });
   }
@@ -1941,15 +1960,15 @@ async function entregarExamen() {
       ${fallados.size ? `<p><b>Temas para repasar:</b></p><ul class="lista-temas">${[...fallados.values()]
         .sort((a, b) => b.n - a.n)
         .map(({ doc, n }) => `<li><a href="#/doc/${doc.id}/resumen">${esc(doc.nombre)}</a> — ${n} fallo${n > 1 ? "s" : ""}</li>`)
-        .join("")}</ul>` : "<p>¡Sin fallos! 🎉</p>"}
+        .join("")}</ul>` : porcentaje === 100 || !vistaExamen.prueba ? "<p>¡Sin fallos! 🎉</p>" : ""}
       <p class="nota">Abajo puedes ver la corrección de cada pregunta.</p>
-      <a class="btn" href="#/examen/${encodeURIComponent(ambito)}">Hacer otro examen</a>
+      ${vistaExamen.prueba ? htmlResultadoDePrueba(vistaExamen.prueba, n.nota, porcentaje, puntos, lista.length) : `<a class="btn" href="#/examen/${encodeURIComponent(ambito)}">Hacer otro examen</a>`}
       ${vistaExamen.reto ? `<div class="reto-resultado"><p><b>🤝 Reto ${esc(vistaExamen.reto)}</b>: sacaste <b>${n.nota}</b> (${porcentaje} %).</p>
         <button class="btn" data-accion="reto-compartir" data-texto="${esc(`🤝 Reto Finlay ${vistaExamen.reto}: saqué ${n.nota} (${porcentaje} %) en ${nombreAmbito(ambito)}. ¿Te atreves? Abre Finlay → Evaluaciones → Reto y escribe el código.`)}">📤 Compartir mi resultado</button></div>` : ""}
     </div>`;
   window.scrollTo({ top: 0, behavior: "smooth" });
   await terminarPrueba({ titulo, acertadas: bienExamen, total: lista.length, pct: porcentaje, nota: n.nota,
-    puntosInicio: vistaExamen.puntosInicio, otraVez: `#/examen/${encodeURIComponent(ambito)}` });
+    puntosInicio: vistaExamen.puntosInicio, otraVez: vistaExamen.prueba ? "#/pruebas" : `#/examen/${encodeURIComponent(ambito)}` });
 }
 
 /** Código de reto: preguntas-semilla-ámbito (t = toda la carrera, a3 = 3er año, s2 = 2da asignatura con preguntas) */
@@ -2653,6 +2672,7 @@ const AYUDA_PANTALLA = {
     <li><b>Repaso del día</b>: lo que fallas vuelve hasta que lo domines.</li>
     <li><b>Examen de práctica</b>: con reloj y nota de 2 a 5, de una asignatura, un año o toda la carrera.</li>
     <li><b>Reto con un compañero</b>: el mismo examen para los dos, con un código.</li>
+    <li><b>Prueba en grupo</b>: mandas el cuestionario como archivo por WhatsApp o Zapya, pones la hora y todos empiezan a la vez.</li>
     <li><b>Plan para el examen</b>: pon la fecha y te reparto los temas por días.</li></ul>` },
   repaso: { pose: "idea", titulo: "Repaso del día", texto: `<p>Te pregunto lo que te toca repasar hoy. Cada acierto <b>aleja</b> esa pregunta en el tiempo; cada fallo la <b>trae de vuelta</b> mañana. Así lo aprendes para siempre, no solo para el examen.</p>` },
   examen: { pose: "carpeta", titulo: "Modo examen", texto: `<ul>
@@ -3015,6 +3035,8 @@ document.addEventListener("submit", async (ev) => {
       <textarea class="codigo-prof" rows="4" readonly>${esc(codigo)}</textarea>
       <a class="btn ancho btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${f.telefono.value.replace(/\D/g, "")}?text=${encodeURIComponent(textoCodigo(f.nombre.value.trim(), codigo))}">📲 Enviar por WhatsApp${f.telefono.value.replace(/\D/g, "") ? "" : " (elegir el chat)"}</a>
       <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar por otra app</button>`;
+  } else if (f.dataset.form === "prueba-nueva") {
+    await crearPruebaEnGrupo(f);
   } else if (f.dataset.form === "reto") {
     const r = await leerCodigoDeReto(f.codigo.value);
     if (!r) return alert("Ese código no es válido o no tienes esa asignatura en Finlay.\nRevisa que tu compañero y tú tengan los mismos materiales.");
@@ -3172,6 +3194,17 @@ document.addEventListener("click", async (ev) => {
     const codigo = await codigoDeReto(f.ambito.value, Number(f.n.value));
     compartirArchivo(`reto-finlay-${codigo}.txt`, `🤝 Reto Finlay: ${codigo}\nAbre Finlay → Evaluaciones → Reto con un compañero y escribe el código.`, "text/plain");
     location.hash = `#/examen-hacer/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}&reloj=${f.reloj.checked ? 1 : 0}&momento=0&reto=${codigo}`;
+  } else if (accion === "prueba-crear") {
+    const f = document.querySelector(".form-examen");
+    location.hash = `#/prueba-nueva/${encodeURIComponent(f.ambito.value)}?n=${f.n.value}`;
+  } else if (accion === "prueba-enviar") {
+    const p = leerPruebas()[b.dataset.id];
+    if (p) enviarPrueba(p);
+  } else if (accion === "prueba-borrar") {
+    if (confirm("¿Quitar esta prueba de tu teléfono?")) { borrarPrueba(b.dataset.id); location.hash = "#/pruebas"; router(); }
+  } else if (accion === "prueba-practica") {
+    const p = leerPruebas()[b.dataset.id];
+    if (p) { guardarPrueba({ ...p, practica: true }); location.hash = `#/examen-hacer/${encodeURIComponent("prueba:" + p.id)}?reloj=1&momento=0`; }
   } else if (accion === "reto-compartir") {
     compartirArchivo("reto-finlay.txt", b.dataset.texto, "text/plain");
   } else if (accion === "enfocar-busqueda") {
@@ -3299,6 +3332,22 @@ document.addEventListener("click", async (ev) => {
 const $paquete = document.getElementById("paquete");
 $paquete.addEventListener("change", () => $paquete.files[0] && cargarPaquete($paquete.files[0]));
 async function cargarPaquete(archivo) {
+  // ¿Es una prueba en grupo (un .json pequeño)? Se guarda y se abre su sala de espera
+  if (/\.json$/i.test(archivo.name) && archivo.size < 3e6) {
+    try {
+      const datos = JSON.parse(await archivo.text());
+      if (datos?.formato === "finlay-prueba") {
+        const p = validarPrueba(datos);
+        const ya = leerPruebas()[p.id];
+        guardarPrueba(ya ? { ...p, resultado: ya.resultado, mia: ya.mia } : p);
+        aviso(`👥 Prueba en grupo recibida: ${p.titulo}`);
+        location.hash = `#/prueba/${p.id}`;
+        return router();
+      }
+    } catch (e) {
+      if (/prueba/i.test(e.message)) return alert(e.message);
+    }
+  }
   try {
     mostrarProgreso("Leyendo el paquete…");
     const datos = await leerPaquete(archivo);
@@ -3329,6 +3378,175 @@ async function cargarPaquete(archivo) {
     console.error(e);
     alert("No se pudo cargar el paquete:\n" + (e?.name === "QuotaExceededError" ? "No queda espacio en el teléfono." : e.message));
   }
+}
+
+// ---------- Prueba en grupo: el mismo cuestionario para todos, a la misma hora ----------
+// La prueba viaja como un archivo pequeño (.json) por WhatsApp, Zapya o Bluetooth, con las preguntas
+// dentro y la hora de inicio. Cada teléfono espera esa hora con una cuenta regresiva. Sin internet.
+function leerPruebas() {
+  try { return JSON.parse(localStorage.getItem("finlay.pruebas") || "{}") || {}; } catch { return {}; }
+}
+function guardarPrueba(p) {
+  const todas = leerPruebas();
+  todas[p.id] = p;
+  // Se guardan las 8 más recientes
+  for (const id of Object.keys(todas).sort((a, b) => (todas[b].inicio || 0) - (todas[a].inicio || 0)).slice(8)) delete todas[id];
+  try { localStorage.setItem("finlay.pruebas", JSON.stringify(todas)); } catch {}
+}
+function borrarPrueba(id) {
+  const todas = leerPruebas();
+  delete todas[id];
+  try { localStorage.setItem("finlay.pruebas", JSON.stringify(todas)); } catch {}
+}
+function docDePrueba(id) {
+  const p = leerPruebas()[id];
+  return p ? { id: "prueba-" + id, prueba: id, nombre: p.titulo, asignaturas: [p.asig || ""], cuestionario: p.preguntas } : null;
+}
+/** Revisa una prueba recibida y devuelve solo lo que se usa (o lanza un error en texto claro) */
+function validarPrueba(d) {
+  const preguntas = (Array.isArray(d.preguntas) ? d.preguntas : []).filter((p) => !errorEnPregunta(p) && p.tipo !== "abierta").slice(0, 100);
+  const inicio = Number(d.inicio), minutos = Number(d.minutos);
+  if (!/^[a-z0-9]{6,16}$/.test(String(d.id)) || preguntas.length < 2 || !Number.isFinite(inicio) || !(minutos > 0 && minutos <= 600))
+    throw new Error("Este archivo de prueba en grupo está dañado o incompleto.");
+  return { formato: "finlay-prueba", v: 1, id: d.id, titulo: String(d.titulo || "Prueba en grupo").slice(0, 120), de: String(d.de || "").slice(0, 60),
+    asig: String(d.asig || "").slice(0, 160), inicio, minutos, preguntas };
+}
+const horaDe = (ms) => new Date(ms).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+const diaDe = (ms) => (new Date(ms).toDateString() === new Date().toDateString() ? "hoy" : new Date(ms).toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short" }));
+const duracion = (seg) => (seg >= 3600 ? `${Math.floor(seg / 3600)} h ${Math.floor((seg % 3600) / 60)} min` : seg >= 60 ? `${Math.floor(seg / 60)} min ${String(Math.floor(seg % 60)).padStart(2, "0")} s` : `${Math.max(0, Math.floor(seg))} s`);
+
+function enviarPrueba(p) {
+  const { resultado, mia, practica, ...limpia } = p;
+  const nombre = `Prueba Finlay - ${p.titulo.replace(/[\\/:*?"<>|]+/g, " ").slice(0, 50).trim()} (${horaDe(p.inicio).replace(":", "h")}).json`;
+  compartirArchivo(nombre, JSON.stringify(limpia), "application/json");
+}
+
+function vistaPruebas() {
+  const lista = Object.values(leerPruebas()).sort((a, b) => b.inicio - a.inicio);
+  poner("Prueba en grupo", `
+    <div class="panel"><p class="grande">👥 Todos a la misma hora</p>
+      <ol class="pasos-prueba"><li>Abre el <b>cuestionario</b> de una conferencia (o <b>Examen de práctica</b>) y toca <b>Prueba en grupo</b>.</li>
+        <li>Pon la <b>hora de inicio</b> y manda el archivo al grupo por <b>WhatsApp</b> o <b>Zapya</b>.</li>
+        <li>Cada uno toca el archivo y elige <b>Abrir con Finlay</b>. Al llegar la hora, la prueba empieza sola en todos los teléfonos.</li>
+        <li>Al terminar, cada uno comparte su <b>nota</b> en el grupo.</li></ol>
+      <a class="btn ancho" href="#/examen">Crear una prueba en grupo</a>
+      <button class="btn ancho secundario" data-accion="paquete">📥 Abrir un archivo de prueba que me mandaron</button></div>
+    ${lista.length ? `<h2>Tus pruebas</h2>${lista.map((p) => {
+      const fin = p.inicio + p.minutos * 60000, ahora = Date.now();
+      const estado = p.resultado ? `Sacaste <b class="nota-num n${p.resultado.nota}">${p.resultado.nota}</b> (${p.resultado.pct} %)` : ahora < p.inicio ? `Empieza ${diaDe(p.inicio)} a las <b>${horaDe(p.inicio)}</b>` : ahora < fin ? "<b>Ya empezó</b>: entra ahora" : "Ya terminó";
+      return `<a class="doc prueba-fila" href="#/prueba/${p.id}"><span><b>${esc(p.titulo)}</b></span><span class="sub">${p.preguntas.length} preguntas · ${p.minutos} min${p.de ? ` · de ${esc(p.de)}` : ""}</span><span class="sub">${estado}</span></a>`;
+    }).join("")}` : `<p class="vacio">Todavía no tienes pruebas en grupo.</p>`}`, "#/evaluaciones");
+}
+
+async function vistaPruebaNueva(origen, nPedidas) {
+  const docs = (await documentosDelAmbito(origen || "todo")).filter((d) => d.cuestionario?.length);
+  const utiles = docs.reduce((t, d) => t + d.cuestionario.filter((p) => !p.oculta && p.tipo !== "abierta" && !p.imagen).length, 0);
+  const atras = origen?.startsWith("d:") ? `#/doc/${origen.slice(2)}/cuestionario` : "#/examen";
+  if (utiles < 2) return poner("Prueba en grupo", `<p class="vacio">No hay suficientes preguntas para hacer una prueba.</p>`, atras);
+  const nombre = origen.startsWith("d:") ? docs[0].nombre : nombreAmbito(origen);
+  const cantidades = [...new Set([5, 10, 15, 20, 30, 50].filter((n) => n < utiles).concat(Math.min(utiles, 100)))];
+  const elegida = cantidades.includes(nPedidas) ? nPedidas : [10, 15, 20, 5].find((n) => cantidades.includes(n)) || cantidades[0];
+  poner("Prueba en grupo", `
+    <form class="form-examen form-prueba" data-form="prueba-nueva" data-origen="${esc(origen)}">
+      <p class="grande">👥 Nueva prueba en grupo</p>
+      <label>Nombre de la prueba<input name="titulo" maxlength="100" value="${esc(nombre)}" required></label>
+      <label>¿Cuántas preguntas?<select name="n">${cantidades.map((n) => `<option ${n === elegida ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+      <label>¿Cuándo empieza?<select name="espera">
+        ${[[3, "En 3 minutos"], [5, "En 5 minutos"], [10, "En 10 minutos"], [15, "En 15 minutos"], [30, "En media hora"], [60, "En 1 hora"], [0, "A una hora exacta…"]].map(([v, t]) => `<option value="${v}" ${v === 10 ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <label class="hora-exacta" hidden>Hora de inicio (de hoy)<input type="time" name="hora"></label>
+      <label>Tiempo por pregunta<select name="ritmo"><option value="1">1 minuto</option><option value="1.5" selected>1 minuto y medio</option><option value="2">2 minutos</option></select></label>
+      <button class="btn ancho">Crear y enviar al grupo</button>
+      <p class="nota">Deja tiempo para que el archivo le llegue a todos. La hora la marca el reloj de cada teléfono: revisen que todos tengan la hora bien puesta.</p>
+    </form>`, atras);
+  const f = $app.querySelector(".form-prueba");
+  f.espera.addEventListener("change", () => { f.querySelector(".hora-exacta").hidden = f.espera.value !== "0"; });
+}
+
+async function crearPruebaEnGrupo(f) {
+  const origen = f.dataset.origen;
+  const docs = (await documentosDelAmbito(origen)).filter((d) => d.cuestionario?.length)
+    .map((d) => ({ ...d, cuestionario: d.cuestionario.map((p) => (p.imagen ? { ...p, oculta: true } : p)) }));
+  const n = Number(f.n.value);
+  const elegidas = preguntasDeExamen(docs, n).map(({ doc, i }) => {
+    const { oculta, auto, ...p } = JSON.parse(JSON.stringify(doc.cuestionario[i]));
+    return p;
+  }).filter((p) => !errorEnPregunta(p));
+  if (elegidas.length < 2) return alert("No hay suficientes preguntas para hacer la prueba.");
+  let inicio;
+  if (f.espera.value === "0") {
+    if (!f.hora.value) return alert("Pon la hora de inicio.");
+    const [h, m] = f.hora.value.split(":").map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    if (d.getTime() < Date.now() + 30000) d.setDate(d.getDate() + 1); // esa hora ya pasó hoy: es mañana
+    inicio = d.getTime();
+  } else inicio = Math.ceil((Date.now() + Number(f.espera.value) * 60000) / 60000) * 60000;
+  const prueba = { formato: "finlay-prueba", v: 1, id: Math.random().toString(36).slice(2, 10).padEnd(8, "0"), titulo: f.titulo.value.trim().slice(0, 120) || "Prueba en grupo",
+    de: pref("nombre", ""), asig: docs[0]?.asignaturas?.[0] || "", inicio, minutos: Math.max(2, Math.ceil(elegidas.length * Number(f.ritmo.value))), preguntas: elegidas };
+  guardarPrueba({ ...prueba, mia: true });
+  location.hash = `#/prueba/${prueba.id}`;
+  await router();
+  enviarPrueba(prueba);
+}
+
+/** Sala de espera: cuenta regresiva hasta la hora de inicio; al llegar, la prueba empieza sola */
+function vistaPrueba(id) {
+  const p = leerPruebas()[id];
+  if (!p) return poner("Prueba en grupo", `<p class="vacio">Esta prueba ya no está en tu teléfono.</p>`, "#/pruebas");
+  const fin = p.inicio + p.minutos * 60000;
+  const entrar = `#/examen-hacer/${encodeURIComponent("prueba:" + p.id)}?reloj=1&momento=0`;
+  const r = p.resultado;
+  poner("Prueba en grupo", `
+    <div class="panel centro sala-prueba">
+      <p class="grande">👥 ${esc(p.titulo)}</p>
+      <p class="sub">${p.preguntas.length} preguntas · ${p.minutos} minutos${p.de ? ` · la creó ${esc(p.de)}` : ""}</p>
+      ${r ? `<p class="nota-grande n${r.nota}">${r.nota}</p><p>${r.pct} % · ${r.bien} de ${p.preguntas.length} · en ${duracion(r.seg)}</p>
+          <button class="btn ancho" data-accion="reto-compartir" data-texto="${esc(textoResultadoDePrueba(p, r))}">📤 Compartir mi nota en el grupo</button>`
+        : `<p>Empieza ${diaDe(p.inicio)} a las <b class="hora-prueba">${horaDe(p.inicio)}</b> y termina a las <b>${horaDe(fin)}</b></p>
+          <p class="cuenta-prueba" id="cuenta-prueba">…</p>
+          <div id="entrada-prueba"></div>`}
+      <button class="btn ancho secundario" data-accion="prueba-enviar" data-id="${p.id}">📤 Enviar al grupo (WhatsApp, Zapya…)</button>
+      <p class="nota">Tus compañeros tocan el archivo y eligen <b>Abrir con Finlay</b>. Por Zapya: lo guardas, lo mandas desde Zapya y ellos lo abren con Finlay.</p>
+      ${r ? `<button class="btn ancho secundario" data-accion="prueba-practica" data-id="${p.id}">Volver a hacerla (de práctica)</button>` : ""}
+      <button class="btn mini peligro abajo" data-accion="prueba-borrar" data-id="${p.id}">Quitar esta prueba</button>
+    </div>`, "#/pruebas");
+  if (r) return;
+  const pintar = () => {
+    const caja = document.getElementById("cuenta-prueba");
+    if (!caja) return clearInterval(reloj); // se cambió de pantalla
+    const ahora = Date.now();
+    const entrada = document.getElementById("entrada-prueba");
+    if (ahora < p.inicio) {
+      const seg = Math.ceil((p.inicio - ahora) / 1000);
+      caja.textContent = seg > 3600 ? `Faltan ${duracion(seg)}` : `${String(Math.floor(seg / 60)).padStart(2, "0")}:${String(seg % 60).padStart(2, "0")}`;
+      caja.classList.toggle("ya-casi", seg <= 10);
+      if (!entrada.innerHTML) entrada.innerHTML = `<p class="sub">Deja esta pantalla abierta: la prueba empieza sola.</p>`;
+    } else if (ahora < fin - 20000) {
+      clearInterval(reloj);
+      if (ahora - p.inicio < 4000) { location.hash = entrar; return; } // llegó la hora con la sala abierta: empieza sola
+      caja.textContent = "¡Ya empezó!";
+      entrada.innerHTML = `<a class="btn ancho" href="${entrar}">Entrar ahora (quedan ${duracion((fin - ahora) / 1000)})</a>`;
+    } else {
+      clearInterval(reloj);
+      caja.textContent = "Esta prueba ya terminó";
+      entrada.innerHTML = `<button class="btn ancho" data-accion="prueba-practica" data-id="${p.id}">Hacerla de práctica</button>`;
+    }
+  };
+  const reloj = setInterval(pintar, 500);
+  pintar();
+}
+
+function textoResultadoDePrueba(p, r) {
+  return `👥 Prueba Finlay «${p.titulo}»: ${pref("nombre", "") || "yo"} sacó ${r.nota} (${r.pct} %), ${r.bien} de ${p.preguntas.length}, en ${duracion(r.seg)}.`;
+}
+/** Al entregar una prueba en grupo: se guarda la nota y se ofrece compartirla */
+function htmlResultadoDePrueba(p, notaFinal, pct, puntos, total) {
+  const r = { nota: notaFinal, pct, bien: Number(puntos.toFixed(1)), seg: Math.round((Date.now() - vistaExamen.empezo) / 1000) };
+  const guardada = leerPruebas()[p.id];
+  if (guardada) guardarPrueba({ ...guardada, resultado: guardada.resultado || r, practica: false }); // vale la primera nota; la práctica no la cambia
+  return `<div class="reto-resultado"><p><b>👥 ${esc(p.titulo)}</b>: sacaste <b>${notaFinal}</b> (${pct} %) en ${duracion(r.seg)}.</p>
+    <button class="btn" data-accion="reto-compartir" data-texto="${esc(textoResultadoDePrueba(p, guardada?.resultado || r))}">📤 Compartir mi nota en el grupo</button>
+    <a class="btn secundario" href="#/pruebas">Mis pruebas en grupo</a></div>`;
 }
 
 // ---------- Conferencias compartidas desde WhatsApp, Telegram, Zapya… (solo en el APK) ----------
@@ -3486,6 +3704,9 @@ async function router() {
       vistaExamen.reto = ps.get("reto") || "";
       await vistaExamen(partes[1], Number(ps.get("n")) || 20, ps.get("reloj") === "1", ps.get("momento") === "1");
     }
+    else if (partes[0] === "pruebas") vistaPruebas();
+    else if (partes[0] === "prueba-nueva") await vistaPruebaNueva(partes[1], Number(new URLSearchParams(consulta).get("n")) || 0);
+    else if (partes[0] === "prueba") vistaPrueba(partes[1]);
     else if (partes[0] === "planes") await vistaPlanes();
     else if (partes[0] === "plan") await vistaPlan(Number(partes[1]));
     else if (partes[0] === "copia") await vistaCopia();
