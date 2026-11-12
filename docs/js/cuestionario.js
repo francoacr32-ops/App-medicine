@@ -273,3 +273,54 @@ export function mezclarPregunta(p) {
 export function mezclarDocumento(doc) {
   return doc?.cuestionario?.length ? { ...doc, cuestionario: doc.cuestionario.map(mezclarPregunta) } : doc;
 }
+
+// ---------- Prueba del profesor: responder sin tener las respuestas, y calificar después ----------
+/** Lo que el estudiante respondió en una tarjeta, en una forma que se puede enviar (no corrige nada). */
+export function leerRespuesta(p, tarjeta, valor) {
+  if (p.tipo === "multiple") return valor === undefined || valor === null ? -1 : Number(valor);
+  if (p.tipo === "vf" && !esLista(p)) return valor === "true" || valor === "false" ? valor : "";
+  if (p.tipo === "marcar") return [...tarjeta.querySelectorAll(".marca")].filter((f) => f.querySelector("input").checked).map((f) => Number(f.dataset.j));
+  if (p.tipo === "vf") return [...tarjeta.querySelectorAll(".fila-vf")].map((f) => f.querySelector("input:checked")?.value || "");
+  if (p.tipo === "enlazar") return [...tarjeta.querySelectorAll(".fila-enlace")].map((f) => (f.querySelector("select").value === "" ? -1 : Number(f.querySelector("select").value)));
+  if (p.tipo === "completar") return [...tarjeta.querySelectorAll(".hueco")].map((h) => h.value.trim().slice(0, 80));
+  return null;
+}
+/** Califica una respuesta enviada contra la pregunta completa (la del profesor). Igual que corregir(), pero sin pantalla. */
+export function calificar(p, r) {
+  const cero = { correcta: false, aciertos: 0, total: 1 };
+  const parcial = (aciertos, total) => ({ correcta: aciertos === total, aciertos, total });
+  if (p.tipo === "multiple") return Number(r) === p.correcta ? parcial(1, 1) : cero;
+  if (p.tipo === "vf" && !esLista(p)) return r !== "" && (r === "true") === p.respuesta ? parcial(1, 1) : cero;
+  if (!Array.isArray(r)) return cero;
+  if (p.tipo === "marcar") {
+    if (!r.length) return cero;
+    return parcial(p.opciones.filter((_, j) => r.includes(j) === p.correctas.includes(j)).length, p.opciones.length);
+  }
+  if (p.tipo === "vf") {
+    if (r.some((x) => !x) || r.length < p.afirmaciones.length) return cero;
+    return parcial(p.afirmaciones.filter((a, j) => (r[j] === "V") === a.respuesta).length, p.afirmaciones.length);
+  }
+  if (p.tipo === "enlazar") {
+    if (r.some((x) => x < 0) || r.length < p.pares.length) return cero;
+    return parcial(p.pares.filter((k, j) => Number(r[j]) === k).length, p.pares.length);
+  }
+  if (p.tipo === "completar") {
+    const huecos = (String(p.pregunta).match(HUECO) || [""]).length;
+    if (r.length < huecos || r.some((x) => !String(x).trim())) return cero;
+    let bien = 0;
+    for (let n = 0; n < huecos; n++) if (respuestasDeHueco(p.respuestas[n] ?? "").some((v) => igual(r[n], v))) bien++;
+    return parcial(bien, huecos);
+  }
+  return cero;
+}
+/** Copia de la pregunta SIN sus respuestas (solo lo que el estudiante necesita ver), con valores de relleno. */
+export function sinRespuestas(p) {
+  const q = { tipo: p.tipo, pregunta: p.pregunta };
+  if (p.tipo === "multiple") Object.assign(q, { opciones: p.opciones, correcta: 0 });
+  else if (p.tipo === "marcar") Object.assign(q, { opciones: p.opciones, correctas: [0] });
+  else if (p.tipo === "vf" && esLista(p)) q.afirmaciones = p.afirmaciones.map((a) => ({ texto: a.texto, respuesta: true }));
+  else if (p.tipo === "vf") q.respuesta = true;
+  else if (p.tipo === "enlazar") Object.assign(q, { columnaA: p.columnaA, columnaB: p.columnaB, pares: p.columnaA.map(() => 0) });
+  else if (p.tipo === "completar") q.respuestas = p.respuestas.map(() => "?");
+  return q;
+}

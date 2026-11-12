@@ -1543,3 +1543,5 @@ html, body { overflow-x: clip; }
 .tabla-notas { width: 100%; } .tabla-notas th { text-align: left; font-size: .8rem; opacity: .7; padding: 4px 6px; } .tabla-notas td { padding: 6px; }
 .tabla-notas .fila-yo td { font-weight: 700; background: rgba(20, 184, 196, .12); }
 .tabla-grupo textarea { flex: 1; min-width: 0; border-radius: 10px; border: 1px solid var(--borde); padding: 8px; font: inherit; background: var(--fondo); color: var(--texto); }
+.cuenta-prueba.entregada { font-size: 3.4rem; }
+.form-prueba .check span { font-weight: 400; }

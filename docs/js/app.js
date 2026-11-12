@@ -9,7 +9,7 @@ import { fragmentarPagina, normalizar } from "./texto.js";
 import { buscar, coincidencias, patronesDe } from "./buscar.js";
 import * as voz from "./voz.js";
 import { leerPaquete, importarPaquete } from "./paquete.js";
-import { errorEnPregunta, NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata, mezclarDocumento } from "./cuestionario.js";
+import { errorEnPregunta, leerRespuesta, calificar, sinRespuestas, NOMBRE_TIPO, htmlEnunciado, htmlOpciones, corregir, textoRespuesta, esInmediata, mezclarDocumento } from "./cuestionario.js";
 import { localizar } from "./guia.js";
 import { tieneVisual, totalPaginas, activarCarga, liberar as liberarDiapositivas, urlPagina } from "./diapositivas.js";
 import { ico } from "./iconos.js";
@@ -874,7 +874,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.9 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 5.0 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1831,12 +1831,13 @@ async function vistaExamen(ambito, cantidad, conReloj, alMomento = false) {
   vistaExamen.puntosInicio = juego.estado().puntos;
   vistaExamen.alMomento = alMomento;
   resultadosExamen.clear();
-  const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length).map(mezclarDocumento);
+  const docs = (await documentosDelAmbito(ambito)).filter((d) => d.cuestionario?.length).map((d) => (d.prueba ? d : mezclarDocumento(d)));
   // En un reto, el orden sale del código: los dos teléfonos eligen las mismas preguntas
   // En una prueba en grupo todos reciben las mismas preguntas, en el mismo orden
   const prueba = ambito.startsWith("prueba:") ? leerPruebas()[ambito.slice(7)] : null;
   vistaExamen.prueba = prueba;
   vistaExamen.empezo = Date.now();
+  if (prueba) vistaExamen.alMomento = alMomento = false; // en grupo nunca se corrige al momento
   const lista = prueba ? (docs[0]?.cuestionario || []).map((_, i) => ({ doc: docs[0], i }))
     : vistaExamen.reto ? preguntasDelReto(docs, cantidad, vistaExamen.reto) : preguntasDeExamen(docs, cantidad);
   if (!lista.length) return poner("Modo examen", `<p class="vacio">No hay preguntas para este examen.</p>`, "#/examen");
@@ -1893,6 +1894,7 @@ function contarExamen() {
 
 async function entregarExamen() {
   if (modo !== "examen") return;
+  if (vistaExamen.prueba?.oficial && !vistaExamen.prueba.mia) return entregarAlProfesor();
   clearInterval(relojExamen);
   modo = "revision";
   salirSesion();
@@ -3036,7 +3038,7 @@ document.addEventListener("submit", async (ev) => {
       <a class="btn ancho btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${f.telefono.value.replace(/\D/g, "")}?text=${encodeURIComponent(textoCodigo(f.nombre.value.trim(), codigo))}">📲 Enviar por WhatsApp${f.telefono.value.replace(/\D/g, "") ? "" : " (elegir el chat)"}</a>
       <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar por otra app</button>`;
   } else if (f.dataset.form === "notas-pegar") {
-    if (!recibirNotas(f.texto.value)) alert("No encontré notas en ese texto.\nCopia el mensaje completo, con el código que empieza por FINLAY-NOTA.");
+    if (!recibirNotas(f.texto.value)) alert("No encontré notas en ese texto.\nCopia el mensaje completo, con el código que empieza por FINLAY.");
   } else if (f.dataset.form === "prueba-nueva") {
     await crearPruebaEnGrupo(f);
   } else if (f.dataset.form === "reto") {
@@ -3204,8 +3206,9 @@ document.addEventListener("click", async (ev) => {
     if (p) enviarPrueba(p);
   } else if (accion === "nota-archivo") {
     const p = leerPruebas()[b.dataset.id];
-    if (p?.resultado) compartirArchivo(`Nota Finlay - ${(pref("nombre", "") || "yo").replace(/[\\/:*?"<>|]+/g, " ")} - ${p.titulo.replace(/[\\/:*?"<>|]+/g, " ").slice(0, 40).trim()}.json`,
-      JSON.stringify({ formato: "finlay-nota", codigo: codigoDeNota(p, p.resultado) }), "application/json");
+    const codigo = p?.entrega && !p.mia ? codigoDeRespuestas(p) : p?.resultado ? codigoDeNota(p, p.resultado) : null;
+    if (codigo) compartirArchivo(`Nota Finlay - ${(pref("nombre", "") || "yo").replace(/[\\/:*?"<>|]+/g, " ")} - ${p.titulo.replace(/[\\/:*?"<>|]+/g, " ").slice(0, 40).trim()}.json`,
+      JSON.stringify({ formato: "finlay-nota", codigo }), "application/json");
   } else if (accion === "prueba-borrar") {
     if (confirm("¿Quitar esta prueba de tu teléfono?")) { borrarPrueba(b.dataset.id); location.hash = "#/pruebas"; router(); }
   } else if (accion === "prueba-practica") {
@@ -3346,7 +3349,7 @@ async function cargarPaquete(archivo) {
       if (datos?.formato === "finlay-prueba") {
         const p = validarPrueba(datos);
         const ya = leerPruebas()[p.id];
-        guardarPrueba(ya ? { ...p, resultado: ya.resultado, mia: ya.mia } : p);
+        if (!ya?.mia) guardarPrueba(ya ? { ...p, resultado: ya.resultado, entrega: ya.entrega, tabla: ya.tabla } : p); // la mía (con las respuestas) no se pisa
         aviso(`👥 Prueba en grupo recibida: ${p.titulo}`);
         location.hash = `#/prueba/${p.id}`;
         return router();
@@ -3411,19 +3414,58 @@ function docDePrueba(id) {
 }
 /** Revisa una prueba recibida y devuelve solo lo que se usa (o lanza un error en texto claro) */
 function validarPrueba(d) {
-  const preguntas = (Array.isArray(d.preguntas) ? d.preguntas : []).filter((p) => !errorEnPregunta(p) && p.tipo !== "abierta").slice(0, 100);
+  if (!d.c || d.s !== sello(datosSellados({ ...d, titulo: String(d.titulo || "") })))
+    throw new Error("Este archivo de prueba fue modificado o es de una versión vieja de Finlay.\nPide que te lo manden otra vez.");
+  let lista = [];
+  try { lista = JSON.parse(new TextDecoder().decode(mezclarBytes(b64ABytes(d.c), String(d.id)))); } catch {}
+  const preguntas = (Array.isArray(lista) ? lista : []).filter((p) => !errorEnPregunta(p) && p.tipo !== "abierta").slice(0, 100);
   const inicio = Number(d.inicio), minutos = Number(d.minutos);
   if (!/^[a-z0-9]{6,16}$/.test(String(d.id)) || preguntas.length < 2 || !Number.isFinite(inicio) || !(minutos > 0 && minutos <= 600))
     throw new Error("Este archivo de prueba en grupo está dañado o incompleto.");
   return { formato: "finlay-prueba", v: 1, id: d.id, titulo: String(d.titulo || "Prueba en grupo").slice(0, 120), de: String(d.de || "").slice(0, 60),
-    asig: String(d.asig || "").slice(0, 160), inicio, minutos, preguntas };
+    asig: String(d.asig || "").slice(0, 160), inicio, minutos, preguntas, oficial: !!d.oficial };
 }
 const horaDe = (ms) => new Date(ms).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
 const diaDe = (ms) => (new Date(ms).toDateString() === new Date().toDateString() ? "hoy" : new Date(ms).toLocaleDateString("es", { weekday: "long", day: "numeric", month: "short" }));
 const duracion = (seg) => (seg >= 3600 ? `${Math.floor(seg / 3600)} h ${Math.floor((seg % 3600) / 60)} min` : seg >= 60 ? `${Math.floor(seg / 60)} min ${String(Math.floor(seg % 60)).padStart(2, "0")} s` : `${Math.max(0, Math.floor(seg))} s`);
 
+// Sello: una huella de lo enviado, calculada con una clave que solo conoce la app. Si alguien cambia
+// la nota, la hora o las preguntas, la huella ya no coincide y Finlay lo rechaza.
+const SECRETO = ["f1n", "Lay", "\u00b7cu", "b4", "#grupo", "~2026"].reverse().join("|");
+function huella(texto, semilla) {
+  let h1 = 0xdeadbeef ^ semilla, h2 = 0x41c6ce57 ^ semilla;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36).padStart(7, "0") + (h1 >>> 0).toString(36).padStart(7, "0");
+}
+const sello = (texto) => huella(SECRETO + texto + SECRETO, 7) + huella(texto + SECRETO, 99).slice(0, 6);
+/** Cifra o descifra (es la misma operación) con una secuencia que sale de la clave y del id de la prueba */
+function mezclarBytes(bytes, id) {
+  let a = parseInt(huella(SECRETO + id, 3).slice(0, 6), 36) >>> 0;
+  const salida = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    salida[i] = bytes[i] ^ ((t ^ (t >>> 14)) & 255);
+  }
+  return salida;
+}
+const bytesAB64 = (b) => { let t = ""; for (let i = 0; i < b.length; i += 8192) t += String.fromCharCode.apply(null, b.subarray(i, i + 8192)); return btoa(t); };
+const b64ABytes = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+const datosSellados = (d) => [d.id, d.inicio, d.minutos, d.oficial ? 1 : 0, d.titulo, d.c].join("|");
+
 function enviarPrueba(p) {
-  const { resultado, mia, practica, ...limpia } = p;
+  // En la prueba del profesor el archivo va SIN las respuestas; en las demás, cifradas
+  const preguntas = p.oficial ? p.preguntas.map(sinRespuestas) : p.preguntas;
+  const limpia = { formato: "finlay-prueba", v: 2, id: p.id, titulo: p.titulo, de: p.de, asig: p.asig, inicio: p.inicio, minutos: p.minutos, oficial: !!p.oficial,
+    c: bytesAB64(mezclarBytes(new TextEncoder().encode(JSON.stringify(preguntas)), p.id)) };
+  limpia.s = sello(datosSellados(limpia));
   const nombre = `Prueba Finlay - ${p.titulo.replace(/[\\/:*?"<>|]+/g, " ").slice(0, 50).trim()} (${horaDe(p.inicio).replace(":", "h")}).json`;
   compartirArchivo(nombre, JSON.stringify(limpia), "application/json");
 }
@@ -3440,7 +3482,7 @@ function vistaPruebas() {
       <button class="btn ancho secundario" data-accion="paquete">📥 Abrir un archivo de prueba que me mandaron</button></div>
     ${lista.length ? `<h2>Tus pruebas</h2>${lista.map((p) => {
       const fin = p.inicio + p.minutos * 60000, ahora = Date.now();
-      const estado = p.resultado ? `Sacaste <b class="nota-num n${p.resultado.nota}">${p.resultado.nota}</b> (${p.resultado.pct} %)` : ahora < p.inicio ? `Empieza ${diaDe(p.inicio)} a las <b>${horaDe(p.inicio)}</b>` : ahora < fin ? "<b>Ya empezó</b>: entra ahora" : "Ya terminó";
+      const estado = p.entrega && !p.mia ? "✅ Respondida: envía tus respuestas al profesor" : p.resultado ? `Sacaste <b class="nota-num n${p.resultado.nota}">${p.resultado.nota}</b> (${p.resultado.pct} %)` : ahora < p.inicio ? `Empieza ${diaDe(p.inicio)} a las <b>${horaDe(p.inicio)}</b>` : ahora < fin ? "<b>Ya empezó</b>: entra ahora" : "Ya terminó";
       return `<a class="doc prueba-fila" href="#/prueba/${p.id}"><span><b>${esc(p.titulo)}</b></span><span class="sub">${p.preguntas.length} preguntas · ${p.minutos} min${p.de ? ` · de ${esc(p.de)}` : ""}</span><span class="sub">${estado}</span></a>`;
     }).join("")}` : `<p class="vacio">Todavía no tienes pruebas en grupo.</p>`}`, "#/evaluaciones");
 }
@@ -3462,6 +3504,7 @@ async function vistaPruebaNueva(origen, nPedidas) {
         ${[[3, "En 3 minutos"], [5, "En 5 minutos"], [10, "En 10 minutos"], [15, "En 15 minutos"], [30, "En media hora"], [60, "En 1 hora"], [0, "A una hora exacta…"]].map(([v, t]) => `<option value="${v}" ${v === 10 ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       <label class="hora-exacta" hidden>Hora de inicio (de hoy)<input type="time" name="hora"></label>
       <label>Tiempo por pregunta<select name="ritmo"><option value="1">1 minuto</option><option value="1.5" selected>1 minuto y medio</option><option value="2">2 minutos</option></select></label>
+      ${pref("profesorOk") === "1" || seg.esAdmin() ? `<label class="check"><input type="checkbox" name="oficial" checked> <span><b>Prueba del profesor</b>: el archivo va sin las respuestas. Los estudiantes no ven su nota: me mandan sus respuestas y mi teléfono califica.</span></label>` : ""}
       <button class="btn ancho">Crear y enviar al grupo</button>
       <p class="nota">Deja tiempo para que el archivo le llegue a todos. La hora la marca el reloj de cada teléfono: revisen que todos tengan la hora bien puesta.</p>
     </form>`, atras);
@@ -3489,7 +3532,8 @@ async function crearPruebaEnGrupo(f) {
     inicio = d.getTime();
   } else inicio = Math.ceil((Date.now() + Number(f.espera.value) * 60000) / 60000) * 60000;
   const prueba = { formato: "finlay-prueba", v: 1, id: Math.random().toString(36).slice(2, 10).padEnd(8, "0"), titulo: f.titulo.value.trim().slice(0, 120) || "Prueba en grupo",
-    de: pref("nombre", ""), asig: docs[0]?.asignaturas?.[0] || "", inicio, minutos: Math.max(2, Math.ceil(elegidas.length * Number(f.ritmo.value))), preguntas: elegidas };
+    de: pref("nombre", ""), asig: docs[0]?.asignaturas?.[0] || "", inicio, minutos: Math.max(2, Math.ceil(elegidas.length * Number(f.ritmo.value))), preguntas: elegidas,
+    oficial: !!f.oficial?.checked && (pref("profesorOk") === "1" || seg.esAdmin()) };
   guardarPrueba({ ...prueba, mia: true });
   location.hash = `#/prueba/${prueba.id}`;
   await router();
@@ -3503,10 +3547,25 @@ function vistaPrueba(id) {
   const fin = p.inicio + p.minutos * 60000;
   const entrar = `#/examen-hacer/${encodeURIComponent("prueba:" + p.id)}?reloj=1&momento=0`;
   const r = p.resultado;
+  if (p.entrega && !p.mia) {
+    // Prueba del profesor ya respondida: solo queda enviar las respuestas
+    return poner("Prueba en grupo", `
+      <div class="panel centro sala-prueba">
+        <p class="grande">📝 ${esc(p.titulo)}</p>
+        <p class="sub">${p.preguntas.length} preguntas${p.de ? ` · prueba de ${esc(p.de)}` : ""}</p>
+        <p class="cuenta-prueba entregada">✅</p>
+        <p><b>Ya respondiste</b> (en ${duracion(p.entrega.seg)}). Envíale tus respuestas al profesor: él califica y publica la tabla.</p>
+        <button class="btn ancho" data-accion="reto-compartir" data-texto="${esc(textoDeEntrega(p))}">📤 Enviar mis respuestas al profesor (WhatsApp)</button>
+        <button class="btn ancho secundario" data-accion="nota-archivo" data-id="${p.id}">💾 Guardarlas como archivo (para Zapya)</button>
+        <p class="nota">Tus respuestas van selladas: no se pueden cambiar después de entregar.</p>
+        <button class="btn mini peligro abajo" data-accion="prueba-borrar" data-id="${p.id}">Quitar esta prueba</button>
+      </div>`, "#/pruebas");
+  }
   poner("Prueba en grupo", `
     <div class="panel centro sala-prueba">
       <p class="grande">👥 ${esc(p.titulo)}</p>
       <p class="sub">${p.preguntas.length} preguntas · ${p.minutos} minutos${p.de ? ` · la creó ${esc(p.de)}` : ""}</p>
+      ${p.oficial ? `<p class="nota">📋 <b>Prueba del profesor</b>${p.mia ? ": el archivo va sin las respuestas. Los estudiantes te mandan sus respuestas y tu teléfono las califica." : ": responde y al final envíale tus respuestas. La nota la pone su teléfono."}</p>` : ""}
       ${r ? `<p class="nota-grande n${r.nota}">${r.nota}</p><p>${r.pct} % · ${r.bien} de ${p.preguntas.length} · en ${duracion(r.seg)}</p>
           <button class="btn ancho" data-accion="reto-compartir" data-texto="${esc(textoResultadoDePrueba(p, r))}">📤 Compartir mi nota en el grupo</button>`
         : `<p>Empieza ${diaDe(p.inicio)} a las <b class="hora-prueba">${horaDe(p.inicio)}</b> y termina a las <b>${horaDe(fin)}</b></p>
@@ -3537,7 +3596,7 @@ function vistaPrueba(id) {
     } else {
       clearInterval(reloj);
       caja.textContent = "Esta prueba ya terminó";
-      entrada.innerHTML = `<button class="btn ancho" data-accion="prueba-practica" data-id="${p.id}">Hacerla de práctica</button>`;
+      entrada.innerHTML = p.oficial && !p.mia ? "" : `<button class="btn ancho" data-accion="prueba-practica" data-id="${p.id}">Hacerla de práctica</button>`;
     }
   };
   const reloj = setInterval(pintar, 500);
@@ -3554,18 +3613,51 @@ function textoResultadoDePrueba(p, r) {
 const b64u = (t) => btoa(unescape(encodeURIComponent(t))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const deB64u = (t) => decodeURIComponent(escape(atob(t.replace(/-/g, "+").replace(/_/g, "/"))));
 function codigoDeNota(p, r) {
-  return "FINLAY-NOTA." + b64u(JSON.stringify({ i: p.id, n: (pref("nombre", "") || "Sin nombre").slice(0, 40), t: r.nota, p: r.pct, b: r.bien, s: r.seg }));
+  const datos = b64u(JSON.stringify({ i: p.id, n: (pref("nombre", "") || "Sin nombre").slice(0, 40), t: r.nota, p: r.pct, b: r.bien, s: r.seg }));
+  return `FINLAY-NOTA.${datos}.${sello("nota|" + datos)}`;
+}
+/** Prueba del profesor: lo que manda el estudiante son sus respuestas (no una nota) */
+function codigoDeRespuestas(p) {
+  const datos = b64u(JSON.stringify({ i: p.id, n: (pref("nombre", "") || "Sin nombre").slice(0, 40), s: p.entrega.seg, r: p.entrega.r }));
+  return `FINLAY-RESP.${datos}.${sello("resp|" + datos)}`;
+}
+const textoDeEntrega = (p) => `📝 Respuestas de ${pref("nombre", "") || "un estudiante"} para la prueba «${p.titulo}» (para el profesor):\n${codigoDeRespuestas(p)}`;
+
+async function entregarAlProfesor() {
+  clearInterval(relojExamen);
+  modo = "revision";
+  salirSesion();
+  $app.classList.remove("modo-examen");
+  const p = vistaExamen.prueba;
+  const r = enPantalla.map(({ doc, i }, k) => leerRespuesta(doc.cuestionario[i], document.getElementById("p" + k), elegidasExamen.get(k)));
+  const guardada = leerPruebas()[p.id] || p;
+  if (!guardada.entrega) guardarPrueba({ ...guardada, entrega: { r, seg: Math.round((Date.now() - vistaExamen.empezo) / 1000) } }); // vale la primera entrega
+  aviso("✅ Respuestas guardadas. Ahora envíaselas al profesor.");
+  location.hash = `#/prueba/${p.id}`;
+  await router();
 }
 /** Busca notas en un texto (pueden venir varios mensajes juntos) y las suma a la tabla de su prueba. Devuelve cuántas leyó. */
 function recibirNotas(texto) {
-  let leidas = 0, ajenas = 0, ultima = null;
-  for (const m of String(texto).matchAll(/FINLAY-NOTA\.([\w-]{20,400})/g)) {
+  let leidas = 0, ajenas = 0, falsas = 0, ultima = null;
+  for (const m of String(texto).matchAll(/FINLAY-(NOTA|RESP)\.([\w-]{20,6000})\.([a-z0-9]{20})/g)) {
     try {
-      const d = JSON.parse(deB64u(m[1]));
+      if (m[3] !== sello((m[1] === "NOTA" ? "nota|" : "resp|") + m[2])) { falsas++; continue; } // cambiada a mano o inventada
+      const d = JSON.parse(deB64u(m[2]));
       const p = leerPruebas()[d.i];
       if (!p) { ajenas++; continue; }
       const nombre = String(d.n || "Sin nombre").slice(0, 40);
-      const fila = { nombre, nota: Math.min(5, Math.max(2, Number(d.t) || 2)), pct: Math.min(100, Math.max(0, Number(d.p) || 0)), bien: Number(d.b) || 0, seg: Math.max(0, Number(d.s) || 0) };
+      let fila;
+      if (m[1] === "RESP") {
+        // Respuestas de un estudiante: solo las califica el teléfono del profesor que creó la prueba
+        if (!p.mia || !p.oficial || !Array.isArray(d.r)) { ajenas++; continue; }
+        let puntos = 0;
+        p.preguntas.forEach((q, k) => { const c = calificar(q, d.r[k]); puntos += c.aciertos / c.total; });
+        const pct = Math.round((puntos / p.preguntas.length) * 100);
+        fila = { nombre, nota: nota(pct).nota, pct, bien: Number(puntos.toFixed(1)), seg: Math.max(0, Number(d.s) || 0) };
+      } else {
+        if (p.oficial) { falsas++; continue; } // en la prueba del profesor no valen notas sueltas
+        fila = { nombre, nota: Math.min(5, Math.max(2, Number(d.t) || 2)), pct: Math.min(100, Math.max(0, Number(d.p) || 0)), bien: Number(d.b) || 0, seg: Math.max(0, Number(d.s) || 0) };
+      }
       guardarPrueba({ ...p, tabla: { ...(p.tabla || {}), [nombre.toLowerCase()]: fila } });
       leidas++;
       ultima = p.id;
@@ -3575,8 +3667,10 @@ function recibirNotas(texto) {
     aviso(`📊 ${leidas} nota${leidas === 1 ? "" : "s"} añadida${leidas === 1 ? "" : "s"} a la tabla`);
     location.hash = `#/prueba/${ultima}`;
     router();
-  } else if (ajenas) alert("Esa nota es de una prueba que no está en este teléfono.\nAbre primero el archivo de la prueba con Finlay.");
-  return leidas + ajenas;
+  } else if (falsas) alert("⚠ Esa nota no es válida: fue cambiada a mano o no la hizo Finlay.");
+  else if (ajenas) alert("Esa nota es de una prueba que no está en este teléfono (o solo la puede calificar el profesor que la creó).");
+  else if (/FINLAY-(NOTA|RESP)/.test(texto)) { alert("⚠ Esa nota no es válida: está incompleta, fue cambiada a mano o es de una versión vieja de Finlay."); return 1; }
+  return leidas + ajenas + falsas;
 }
 function filasDeTabla(p) {
   const tabla = { ...(p.tabla || {}) };
@@ -3584,13 +3678,14 @@ function filasDeTabla(p) {
   return Object.values(tabla).sort((a, b) => b.pct - a.pct || a.seg - b.seg);
 }
 function htmlTablaDePrueba(p) {
+  if (p.oficial && !p.mia) return `<p class="nota">📋 <b>Prueba del profesor</b>: tu nota la calcula el teléfono del profesor con tus respuestas. Él publicará la tabla del grupo.</p>`;
   const filas = filasDeTabla(p);
   const medalla = ["🥇", "🥈", "🥉"];
   return `<section class="tabla-grupo"><h2>📊 Tabla del grupo</h2>
     ${filas.length ? `<table class="tabla-asignaturas tabla-notas"><thead><tr><th></th><th>Nombre</th><th>Nota</th><th>%</th><th>Tiempo</th></tr></thead><tbody>${filas
       .map((f, k) => `<tr class="${f.yo ? "fila-yo" : ""}"><td>${medalla[k] || k + 1}</td><td>${esc(f.nombre)}</td><td><b class="nota-num n${f.nota}">${f.nota}</b></td><td>${f.pct}</td><td>${duracion(f.seg)}</td></tr>`).join("")}</tbody></table>
       <button class="btn ancho" data-accion="reto-compartir" data-texto="${esc(`📊 Tabla de la prueba Finlay «${p.titulo}»\n` + filas.map((f, k) => `${medalla[k] || k + 1 + "."} ${f.nombre}: ${f.nota} (${f.pct} %) en ${duracion(f.seg)}`).join("\n"))}">📤 Enviar la tabla al grupo</button>` : `<p class="sub">Todavía no hay notas.</p>`}
-    <p class="nota">Para sumar la nota de un compañero: en WhatsApp mantén el dedo sobre su mensaje, toca <b>Compartir</b> y elige <b>Finlay</b>. O copia los mensajes (pueden ser varios) y pégalos aquí:</p>
+    <p class="nota">${p.oficial ? "Para calificar a un estudiante" : "Para sumar la nota de un compañero"}: en WhatsApp mantén el dedo sobre su mensaje, toca <b>Compartir</b> y elige <b>Finlay</b>. O copia los mensajes (pueden ser varios) y pégalos aquí:</p>
     <form data-form="notas-pegar" class="fila-reto"><textarea name="texto" rows="2" placeholder="Pega aquí los mensajes con las notas" required></textarea><button class="btn">Añadir</button></form>
     ${p.resultado ? `<button class="btn ancho secundario" data-accion="nota-archivo" data-id="${p.id}">💾 Guardar mi nota como archivo (para Zapya)</button>` : ""}</section>`;
 }
