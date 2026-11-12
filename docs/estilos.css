@@ -1435,7 +1435,7 @@ button.chip-filtro { font: inherit; font-weight: 600; font-size: .9rem; cursor: 
 .original-hoja { width: max-content; min-width: 100%; transform-origin: 0 0; }
 .original-hoja .docx-wrapper { background: transparent !important; padding: 12px !important; }
 .original-hoja .docx-wrapper > section.docx { box-shadow: 0 2px 10px rgba(0, 0, 0, .35); margin-bottom: 12px !important; }
-.original-hoja.pptx { padding: 10px; }
+.original-hoja.pptx, .original-hoja.ppt { padding: 10px; }
 .original-hoja.pptx .pptx-preview-wrapper { height: auto !important; overflow: visible !important; background: transparent !important; }
 .original-hoja.pptx .pptx-preview-slide-wrapper { margin-bottom: 12px !important; box-shadow: 0 2px 10px rgba(0, 0, 0, .35); }
 .original-barra .btn { width: auto; flex: none; margin: 0; padding: 8px 14px; }

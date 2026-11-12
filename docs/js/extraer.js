@@ -27,7 +27,7 @@ export async function extraerTexto(archivo, progreso = () => {}) {
 
 // ---------- Word y PowerPoint viejos (.doc y .ppt, de Office 97-2003) ----------
 let cfbPromesa = null;
-function cargarCfb() {
+export function cargarCfb() {
   if (!cfbPromesa) {
     cfbPromesa = new Promise((resolver, rechazar) => {
       if (window.CFB) return resolver(window.CFB);

@@ -1,6 +1,6 @@
 // Muestra un Word (.docx) o un PowerPoint (.pptx) con su formato original, sin internet,
 // dentro de un visor con zoom (dos dedos o botones + / −).
-import { cargarJSZip } from "./extraer.js";
+import { cargarJSZip, cargarCfb } from "./extraer.js";
 
 const BASE = new URL("../lib/", import.meta.url).href;
 const cargados = new Map();
@@ -17,6 +17,8 @@ function cargarScript(nombre, global) {
   }
   return cargados.get(nombre);
 }
+
+const urlsPpt = [];
 
 export function tipoOriginal(nombre = "") {
   const ext = String(nombre).toLowerCase().split(".").pop();
@@ -43,6 +45,22 @@ export async function pintarOriginal(hoja, blob, tipo) {
       w.style.overflow = "visible";
       w.style.background = "transparent";
     });
+  } else if (tipo === "ppt") {
+    // PowerPoint viejo (97-2003): lo dibuja Finlay con su propio lector
+    const [CFB, lector] = await Promise.all([cargarCfb(), import("./ppt97.js")]);
+    urlsPpt.splice(0).forEach((u) => URL.revokeObjectURL(u)); // imágenes de la presentación anterior
+    const pres = lector.leerPpt(CFB, new Uint8Array(await blob.arrayBuffer()), (bytes, mime) => {
+      const u = URL.createObjectURL(new Blob([bytes], { type: mime }));
+      urlsPpt.push(u);
+      return u;
+    });
+    if (!document.getElementById("css-ppt")) {
+      const st = document.createElement("style");
+      st.id = "css-ppt";
+      st.textContent = lector.CSS_PPT;
+      document.head.appendChild(st);
+    }
+    hoja.innerHTML = pres.diapos.map((d, k) => `<div class="ppt-pagina" id="d${k + 1}">${d}</div>`).join("");
   } else {
     throw new Error("Formato no compatible.");
   }

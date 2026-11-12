@@ -873,7 +873,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.6 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.7 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -1263,7 +1263,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
     cuerpo = nPreg
       ? await htmlCuestionario(doc)
       : `<div class="no-encontrado"><b>Todavía no hay cuestionario.</b>
-          <p>Finlay puede hacer uno automático con las definiciones del texto. Es un borrador: después puedes quitar las preguntas que no te gusten.</p>
+          <p>Finlay puede hacer uno automático con todo el contenido de la conferencia. Es un borrador: después puedes quitar las preguntas que no te gusten.</p>
           <button class="btn" data-accion="generar-cuestionario" data-id="${doc.id}">⚙ Generar cuestionario automático</button></div>`;
   } else if (tieneVisual(doc)) {
     // Diapositivas con su formato original, una debajo de otra como en un lector de PDF
@@ -1284,16 +1284,16 @@ async function vistaDoc(docId, pestana, irA = 0) {
               <button class="btn-icono mini-voz" data-accion="leer-diapo" data-n="${n}" aria-label="Escuchar la ${palabra.toLowerCase()} ${n}">${ico("voz")}</button></span></figcaption>
           ${misNotas[n]?.t ? `<div class="diapo-nota">✏️ ${esc(misNotas[n].t).replace(/\n/g, "<br>")}</div>` : ""}
         </figure>`).join("")}</div>`;
-  } else if (doc.original) {
-    // Word o PowerPoint con su formato original (se dibuja al abrir), con zoom
+  } else if (formatoDe(doc)) {
+    // Word o PowerPoint (también el .ppt viejo) con su formato original (se dibuja al abrir), con zoom
     cuerpo = `<div class="original-barra">
         <button class="btn-icono" data-zoom="menos" aria-label="Alejar">−</button>
         <span class="original-pct" data-zoom="pct">100 %</span>
         <button class="btn-icono" data-zoom="mas" aria-label="Acercar">＋</button>
         <button class="btn mini secundario" data-zoom="ajustar">Ajustar</button>
         ${doc.paginas ? `<a class="btn mini secundario" href="#/leer/${doc.id}">Solo texto</a>` : ""}</div>
-      <p class="sub diapo-info">${doc.original === "pptx" ? "PowerPoint" : "Word"} con su formato original · acerca y aleja con dos dedos o con ＋ y −</p>
-      <div class="original-marco"><div class="original-hoja ${doc.original}"><p class="centro sub">Preparando el documento…</p></div></div>`;
+      <p class="sub diapo-info">${formatoDe(doc) === "docx" ? "Word" : "PowerPoint"} con su formato original · acerca y aleja con dos dedos o con ＋ y −</p>
+      <div class="original-marco"><div class="original-hoja ${formatoDe(doc)}"><p class="centro sub">Preparando el documento…</p></div></div>`;
   } else if (doc.paginas) {
     // Sin imagen (Word o PowerPoint cargado desde el teléfono): el texto de cada página en una tarjeta
     const frags = await db.fragmentosDe(doc.id);
@@ -1336,7 +1336,7 @@ async function vistaDoc(docId, pestana, irA = 0) {
   vistaDoc.doc = doc;
   if (pestana === "cuestionario") iniciarSesion(false);
   else if (tieneVisual(doc)) activarCarga($app, doc);
-  else if (doc.original && pestana === "conferencia") montarOriginal(doc);
+  else if (formatoDe(doc) && pestana === "conferencia") montarOriginal(doc);
   // Vuelve a la diapositiva donde se quedó (si no se pidió otra)
   if (!irA && pestana === "conferencia") irA = Number(pref("pos-" + docId)) || 0;
   if (irA > 1) document.getElementById("d" + irA)?.scrollIntoView({ block: "start" });
@@ -1349,6 +1349,11 @@ function htmlLibroEcimed(l) {
     <a class="btn mini" href="${organizar.enlaceEcimed(l)}" target="_blank" rel="noopener">${l.enlace ? "⬇ Descargar" : "🔎 Buscar en ECIMED"}</a></div>`;
 }
 
+/** Formato con que se dibuja un material: docx, pptx o ppt (PowerPoint viejo); null si no se dibuja */
+function formatoDe(doc) {
+  return doc.original || (doc.viejo === "ppt" ? "ppt" : null);
+}
+
 /** Dibuja el Word o PowerPoint guardado y le pone el zoom; si falla, ofrece el texto */
 async function montarOriginal(doc) {
   const marco = $app.querySelector(".original-marco");
@@ -1357,14 +1362,15 @@ async function montarOriginal(doc) {
   try {
     const blob = await db.obtenerArchivo(doc.id);
     if (!blob) throw new Error("No se encontró el archivo original.");
-    const ancho = await pintarOriginal(hoja, blob, doc.original);
+    const ancho = await pintarOriginal(hoja, blob, formatoDe(doc));
     if (!hoja.isConnected) return; // se cambió de pantalla mientras se dibujaba
     const b = (n) => $app.querySelector(`[data-zoom="${n}"]`);
     zoomOriginal(marco, hoja, { mas: b("mas"), menos: b("menos"), ajustar: b("ajustar"), pct: b("pct") }, ancho);
   } catch (e) {
     console.error(e);
     if (hoja.isConnected) hoja.innerHTML = `<div class="no-encontrado"><b>No se pudo mostrar con el formato original</b><p>${esc(e.message)}</p>
-      ${doc.paginas ? `<a class="btn" href="#/leer/${doc.id}">Ver el texto</a>` : ""}</div>`;
+      ${doc.paginas ? `<a class="btn" href="#/leer/${doc.id}">Ver el texto</a>` : ""}
+      ${doc.viejo ? `<button class="btn secundario" data-accion="abrir-wps" data-id="${doc.id}">Abrir en WPS</button>` : ""}</div>`;
   }
 }
 
@@ -1707,7 +1713,7 @@ async function htmlCuestionario(doc) {
   };
   const bien = [...resp.values()].filter((r) => r.ultima).length;
   return `<p class="marcador" id="marcador">Respondidas ${Math.min(resp.size, totalVisibles)} de ${totalVisibles} · Correctas ${bien}</p>
-    ${doc.cuestionarioAuto ? `<p class="nota aviso-auto">⚙ Cuestionario automático (borrador): Finlay lo hizo solo con las definiciones del texto. Si una pregunta está mal, quítala con 🗑.</p>` : ""}
+    ${doc.cuestionarioAuto ? `<p class="nota aviso-auto">⚙ Cuestionario automático (borrador): Finlay lo hizo solo con el contenido de la conferencia. Si una pregunta está mal, quítala con 🗑.</p>` : ""}
     <div class="chips">${chips}</div>
     ${visibles.map(({ i }) => htmlTarjeta(i, resp.get(i))).join("") ||
       `<p class="vacio">No hay preguntas en este grupo. ${filtro === "falladas" ? "¡Bien hecho! 🎉" : ""}</p>`}
@@ -2572,7 +2578,7 @@ const GUIA = [
   { pose: "piensa", titulo: "Cuestionarios", texto: "Cada clase tiene su <b>Cuestionario</b>: verdadero o falso, selección, enlazar columnas, completar y preguntas abiertas, como en los exámenes. Si fallas, te explico <b>por qué</b> y <b>📖 Ver dónde está</b> te lleva a la parte exacta de la clase.", ir: null },
   { pose: "carpeta", titulo: "Evaluaciones", texto: "El <b>repaso del día</b> te pregunta lo que fallas hasta que lo domines. El <b>examen de práctica</b> te pone nota de <b>2 a 5</b>, y el <b>🎓 Examen final</b> de cada año te da la nota por asignatura. También puedes hacer un <b>reto</b> con un compañero y poner la <b>fecha de tu examen</b> para que te arme un plan.", ir: ["#/evaluaciones", "Ir a Evaluaciones"] },
   { pose: "libros", titulo: "Biblioteca", texto: "Todas tus clases y conferencias juntas, con <b>buscador</b>, filtros, <b>Favoritos ❤</b> y el <b>Atlas</b> de imágenes. Con <b>Añadir materiales</b> cargas tus PDF, PowerPoint o Word y Finlay los pone solo en su asignatura.", ir: ["#/biblioteca", "Ir a la Biblioteca"] },
-  { pose: "laptop", titulo: "Desde WhatsApp", texto: "¿Te mandaron una conferencia por WhatsApp? Mantén el dedo sobre el archivo, toca <b>Compartir</b> y elige <b>Finlay</b>. La app la recibe, la organiza en su asignatura y se ve <b>igual que el original</b> (PDF, Word o PowerPoint), con zoom. Si es un formato viejo (<b>.ppt</b> o <b>.doc</b>), te enseño a pasarlo a PDF con WPS en tres toques.", ir: null },
+  { pose: "laptop", titulo: "Desde WhatsApp", texto: "¿Te mandaron una conferencia por WhatsApp? Mantén el dedo sobre el archivo, toca <b>Compartir</b> y elige <b>Finlay</b>. La app la recibe, la organiza en su asignatura y se ve <b>igual que el original</b> (PDF, Word o PowerPoint), con zoom. Los PowerPoint viejos (<b>.ppt</b>) también se ven con su formato. Solo el Word viejo (<b>.doc</b>) hay que pasarlo a PDF con WPS: te enseño cómo en tres toques.", ir: null },
   { pose: "corazon", titulo: "Tarjetas y notas", texto: "Las <b>tarjetas de memoria</b> te preguntan los conceptos clave en el momento justo para no olvidarlos. Tus <b>notas y marcadores</b> quedan guardados en cada diapositiva.", ir: ["#/tarjetas", "Ver las tarjetas"] },
   { pose: "salta", titulo: "Progreso y logros", texto: "Ganas <b>puntos</b> al estudiar, subes de <b>nivel médico</b> (de estudiante de primer año a eminencia médica) y desbloqueas <b>medallas y trofeos</b>. En <b>Mi progreso</b> ves tus estadísticas y tu tiempo de estudio.", ir: ["#/progreso", "Ver mi progreso"] },
   { pose: "brazos", titulo: "Perfil y configuración", texto: "Pon tu nombre y tu foto, el <b>modo oscuro</b>, el tamaño de letra, tu <b>meta diaria</b> y la voz. Haz <b>copia de seguridad</b> de vez en cuando para no perder tu progreso si cambias de teléfono.", ir: ["#/perfil", "Ir al Perfil"] },
@@ -2774,7 +2780,7 @@ async function guardarMaterial(archivo, paginas, asigId, tipo, nombre = archivo.
   // .ppt y .doc viejos: se guarda el archivo para poder abrirlo en WPS y pasarlo a PDF
   const viejo = ["ppt", "doc"].includes(tipoDeArchivo(archivo.name)) ? tipoDeArchivo(archivo.name) : null;
   if (viejo) doc.viejo = viejo;
-  // Cuestionario automático (borrador) a partir de las definiciones del texto
+  // Cuestionario automático (borrador) a partir de todo el texto
   if (tipo !== "libro") {
     const auto = generarCuestionario(doc, conTexto.map((p) => ({ pagina: p.n, texto: p.texto })));
     if (auto.length) { doc.cuestionario = auto; doc.cuestionarioAuto = true; }
@@ -3257,7 +3263,7 @@ document.addEventListener("click", async (ev) => {
     const porPagina = new Map();
     for (const fr of await db.fragmentosDe(doc.id)) porPagina.set(fr.pagina, (porPagina.get(fr.pagina) || "") + "\n" + fr.texto);
     const auto = generarCuestionario(doc, [...porPagina].map(([pagina, texto]) => ({ pagina, texto })));
-    if (!auto.length) return alert("No encontré suficientes definiciones en el texto para hacer preguntas.\nFunciona mejor con conferencias que definen conceptos («La mitosis es…»).");
+    if (!auto.length) return alert("Esta conferencia casi no tiene texto para hacer preguntas (puede que sus diapositivas sean solo imágenes).");
     doc.cuestionario = auto;
     doc.cuestionarioAuto = true;
     await db.actualizarDocumento(doc);
