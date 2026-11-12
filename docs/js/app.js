@@ -874,7 +874,7 @@ async function vistaAjustes() {
     <h2>Información</h2>
     <div class="tarjeta menu-lista">
       <details class="menu-fila acerca"><summary>${ico("info")}<span>Acerca de Finlay</span>${ico("chevron", "flecha-der")}</summary>
-        <p>Finlay · Estudio médico · versión 4.8 · ${docs.length} materiales${espacio}.</p>
+        <p>Finlay · Estudio médico · versión 4.9 · ${docs.length} materiales${espacio}.</p>
         <p>Hecha para estudiantes de Medicina en Cuba, en honor a Carlos J. Finlay (1833–1915), el médico cubano que descubrió que el mosquito transmite la fiebre amarilla.</p></details>
       <details class="menu-fila acerca"><summary>${ico("examen")}<span>Términos de uso</span>${ico("chevron", "flecha-der")}</summary>
         <p>Finlay es gratis y funciona sin internet. Las respuestas salen solo de las conferencias y libros cargados, con su página o diapositiva. Tus datos se quedan en tu teléfono: Finlay no los envía a ningún lado.</p></details>
@@ -3035,6 +3035,8 @@ document.addEventListener("submit", async (ev) => {
       <textarea class="codigo-prof" rows="4" readonly>${esc(codigo)}</textarea>
       <a class="btn ancho btn-whatsapp" target="_blank" rel="noopener" href="https://wa.me/${f.telefono.value.replace(/\D/g, "")}?text=${encodeURIComponent(textoCodigo(f.nombre.value.trim(), codigo))}">📲 Enviar por WhatsApp${f.telefono.value.replace(/\D/g, "") ? "" : " (elegir el chat)"}</a>
       <button class="btn ancho secundario" data-accion="codigo-compartir" data-nombre="${esc(f.nombre.value.trim())}">📤 Enviar por otra app</button>`;
+  } else if (f.dataset.form === "notas-pegar") {
+    if (!recibirNotas(f.texto.value)) alert("No encontré notas en ese texto.\nCopia el mensaje completo, con el código que empieza por FINLAY-NOTA.");
   } else if (f.dataset.form === "prueba-nueva") {
     await crearPruebaEnGrupo(f);
   } else if (f.dataset.form === "reto") {
@@ -3200,6 +3202,10 @@ document.addEventListener("click", async (ev) => {
   } else if (accion === "prueba-enviar") {
     const p = leerPruebas()[b.dataset.id];
     if (p) enviarPrueba(p);
+  } else if (accion === "nota-archivo") {
+    const p = leerPruebas()[b.dataset.id];
+    if (p?.resultado) compartirArchivo(`Nota Finlay - ${(pref("nombre", "") || "yo").replace(/[\\/:*?"<>|]+/g, " ")} - ${p.titulo.replace(/[\\/:*?"<>|]+/g, " ").slice(0, 40).trim()}.json`,
+      JSON.stringify({ formato: "finlay-nota", codigo: codigoDeNota(p, p.resultado) }), "application/json");
   } else if (accion === "prueba-borrar") {
     if (confirm("¿Quitar esta prueba de tu teléfono?")) { borrarPrueba(b.dataset.id); location.hash = "#/pruebas"; router(); }
   } else if (accion === "prueba-practica") {
@@ -3336,6 +3342,7 @@ async function cargarPaquete(archivo) {
   if (/\.json$/i.test(archivo.name) && archivo.size < 3e6) {
     try {
       const datos = JSON.parse(await archivo.text());
+      if (datos?.formato === "finlay-nota") { if (!recibirNotas(String(datos.codigo || ""))) alert("Esa nota es de una prueba que no está en este teléfono."); return; }
       if (datos?.formato === "finlay-prueba") {
         const p = validarPrueba(datos);
         const ya = leerPruebas()[p.id];
@@ -3428,7 +3435,7 @@ function vistaPruebas() {
       <ol class="pasos-prueba"><li>Abre el <b>cuestionario</b> de una conferencia (o <b>Examen de práctica</b>) y toca <b>Prueba en grupo</b>.</li>
         <li>Pon la <b>hora de inicio</b> y manda el archivo al grupo por <b>WhatsApp</b> o <b>Zapya</b>.</li>
         <li>Cada uno toca el archivo y elige <b>Abrir con Finlay</b>. Al llegar la hora, la prueba empieza sola en todos los teléfonos.</li>
-        <li>Al terminar, cada uno comparte su <b>nota</b> en el grupo.</li></ol>
+        <li>Al terminar, cada uno comparte su <b>nota</b> en el grupo y Finlay arma la <b>tabla</b> con las de todos.</li></ol>
       <a class="btn ancho" href="#/examen">Crear una prueba en grupo</a>
       <button class="btn ancho secundario" data-accion="paquete">📥 Abrir un archivo de prueba que me mandaron</button></div>
     ${lista.length ? `<h2>Tus pruebas</h2>${lista.map((p) => {
@@ -3508,6 +3515,7 @@ function vistaPrueba(id) {
       <button class="btn ancho secundario" data-accion="prueba-enviar" data-id="${p.id}">📤 Enviar al grupo (WhatsApp, Zapya…)</button>
       <p class="nota">Tus compañeros tocan el archivo y eligen <b>Abrir con Finlay</b>. Por Zapya: lo guardas, lo mandas desde Zapya y ellos lo abren con Finlay.</p>
       ${r ? `<button class="btn ancho secundario" data-accion="prueba-practica" data-id="${p.id}">Volver a hacerla (de práctica)</button>` : ""}
+      ${htmlTablaDePrueba(p)}
       <button class="btn mini peligro abajo" data-accion="prueba-borrar" data-id="${p.id}">Quitar esta prueba</button>
     </div>`, "#/pruebas");
   if (r) return;
@@ -3537,7 +3545,54 @@ function vistaPrueba(id) {
 }
 
 function textoResultadoDePrueba(p, r) {
-  return `👥 Prueba Finlay «${p.titulo}»: ${pref("nombre", "") || "yo"} sacó ${r.nota} (${r.pct} %), ${r.bien} de ${p.preguntas.length}, en ${duracion(r.seg)}.`;
+  return `👥 Prueba Finlay «${p.titulo}»: ${pref("nombre", "") || "yo"} sacó ${r.nota} (${r.pct} %), ${r.bien} de ${p.preguntas.length}, en ${duracion(r.seg)}.\n\nPara la tabla (comparte este mensaje a Finlay): ${codigoDeNota(p, r)}`;
+}
+
+// ----- Tabla de notas del grupo -----
+// Cada nota viaja dentro del mensaje como un código corto (FINLAY-NOTA.…). Quien tenga la prueba en su
+// teléfono comparte esos mensajes a Finlay (o los pega) y la app arma la tabla. Sin internet.
+const b64u = (t) => btoa(unescape(encodeURIComponent(t))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const deB64u = (t) => decodeURIComponent(escape(atob(t.replace(/-/g, "+").replace(/_/g, "/"))));
+function codigoDeNota(p, r) {
+  return "FINLAY-NOTA." + b64u(JSON.stringify({ i: p.id, n: (pref("nombre", "") || "Sin nombre").slice(0, 40), t: r.nota, p: r.pct, b: r.bien, s: r.seg }));
+}
+/** Busca notas en un texto (pueden venir varios mensajes juntos) y las suma a la tabla de su prueba. Devuelve cuántas leyó. */
+function recibirNotas(texto) {
+  let leidas = 0, ajenas = 0, ultima = null;
+  for (const m of String(texto).matchAll(/FINLAY-NOTA\.([\w-]{20,400})/g)) {
+    try {
+      const d = JSON.parse(deB64u(m[1]));
+      const p = leerPruebas()[d.i];
+      if (!p) { ajenas++; continue; }
+      const nombre = String(d.n || "Sin nombre").slice(0, 40);
+      const fila = { nombre, nota: Math.min(5, Math.max(2, Number(d.t) || 2)), pct: Math.min(100, Math.max(0, Number(d.p) || 0)), bien: Number(d.b) || 0, seg: Math.max(0, Number(d.s) || 0) };
+      guardarPrueba({ ...p, tabla: { ...(p.tabla || {}), [nombre.toLowerCase()]: fila } });
+      leidas++;
+      ultima = p.id;
+    } catch { /* código cortado o mal copiado */ }
+  }
+  if (leidas) {
+    aviso(`📊 ${leidas} nota${leidas === 1 ? "" : "s"} añadida${leidas === 1 ? "" : "s"} a la tabla`);
+    location.hash = `#/prueba/${ultima}`;
+    router();
+  } else if (ajenas) alert("Esa nota es de una prueba que no está en este teléfono.\nAbre primero el archivo de la prueba con Finlay.");
+  return leidas + ajenas;
+}
+function filasDeTabla(p) {
+  const tabla = { ...(p.tabla || {}) };
+  if (p.resultado) tabla[(pref("nombre", "") || "yo").toLowerCase()] = { nombre: pref("nombre", "") || "Yo", ...p.resultado, yo: true };
+  return Object.values(tabla).sort((a, b) => b.pct - a.pct || a.seg - b.seg);
+}
+function htmlTablaDePrueba(p) {
+  const filas = filasDeTabla(p);
+  const medalla = ["🥇", "🥈", "🥉"];
+  return `<section class="tabla-grupo"><h2>📊 Tabla del grupo</h2>
+    ${filas.length ? `<table class="tabla-asignaturas tabla-notas"><thead><tr><th></th><th>Nombre</th><th>Nota</th><th>%</th><th>Tiempo</th></tr></thead><tbody>${filas
+      .map((f, k) => `<tr class="${f.yo ? "fila-yo" : ""}"><td>${medalla[k] || k + 1}</td><td>${esc(f.nombre)}</td><td><b class="nota-num n${f.nota}">${f.nota}</b></td><td>${f.pct}</td><td>${duracion(f.seg)}</td></tr>`).join("")}</tbody></table>
+      <button class="btn ancho" data-accion="reto-compartir" data-texto="${esc(`📊 Tabla de la prueba Finlay «${p.titulo}»\n` + filas.map((f, k) => `${medalla[k] || k + 1 + "."} ${f.nombre}: ${f.nota} (${f.pct} %) en ${duracion(f.seg)}`).join("\n"))}">📤 Enviar la tabla al grupo</button>` : `<p class="sub">Todavía no hay notas.</p>`}
+    <p class="nota">Para sumar la nota de un compañero: en WhatsApp mantén el dedo sobre su mensaje, toca <b>Compartir</b> y elige <b>Finlay</b>. O copia los mensajes (pueden ser varios) y pégalos aquí:</p>
+    <form data-form="notas-pegar" class="fila-reto"><textarea name="texto" rows="2" placeholder="Pega aquí los mensajes con las notas" required></textarea><button class="btn">Añadir</button></form>
+    ${p.resultado ? `<button class="btn ancho secundario" data-accion="nota-archivo" data-id="${p.id}">💾 Guardar mi nota como archivo (para Zapya)</button>` : ""}</section>`;
 }
 /** Al entregar una prueba en grupo: se guarda la nota y se ofrece compartirla */
 function htmlResultadoDePrueba(p, notaFinal, pct, puntos, total) {
@@ -3546,7 +3601,7 @@ function htmlResultadoDePrueba(p, notaFinal, pct, puntos, total) {
   if (guardada) guardarPrueba({ ...guardada, resultado: guardada.resultado || r, practica: false }); // vale la primera nota; la práctica no la cambia
   return `<div class="reto-resultado"><p><b>👥 ${esc(p.titulo)}</b>: sacaste <b>${notaFinal}</b> (${pct} %) en ${duracion(r.seg)}.</p>
     <button class="btn" data-accion="reto-compartir" data-texto="${esc(textoResultadoDePrueba(p, guardada?.resultado || r))}">📤 Compartir mi nota en el grupo</button>
-    <a class="btn secundario" href="#/pruebas">Mis pruebas en grupo</a></div>`;
+    <a class="btn secundario" href="#/prueba/${p.id}">📊 Ver la tabla del grupo</a></div>`;
 }
 
 // ---------- Conferencias compartidas desde WhatsApp, Telegram, Zapya… (solo en el APK) ----------
@@ -3558,7 +3613,7 @@ async function recogerRecibidos() {
   try { lista = JSON.parse(window.FinlayAndroid.tomarRecibidos() || "[]"); } catch { return; }
   if (!lista.length) return;
   // Texto compartido: si trae un código de profesor, se verifica solo
-  for (const r of lista.filter((x) => x.texto)) await recibirCodigoProfesor(r.texto);
+  for (const r of lista.filter((x) => x.texto)) if (!recibirNotas(r.texto)) await recibirCodigoProfesor(r.texto);
   lista = lista.filter((x) => !x.texto);
   if (!lista.length) return;
   recibiendo = true;

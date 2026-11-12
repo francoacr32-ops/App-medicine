@@ -1539,3 +1539,7 @@ html, body { overflow-x: clip; }
 .cuenta-prueba.ya-casi { color: #e5484d; animation: late-prueba .5s ease-in-out infinite alternate; }
 @keyframes late-prueba { from { transform: scale(1); } to { transform: scale(1.12); } }
 .form-prueba input[type=time], .form-prueba input[name=titulo] { width: 100%; }
+.tabla-grupo { text-align: left; margin-top: 18px; border-top: 1px solid var(--borde); padding-top: 6px; }
+.tabla-notas { width: 100%; } .tabla-notas th { text-align: left; font-size: .8rem; opacity: .7; padding: 4px 6px; } .tabla-notas td { padding: 6px; }
+.tabla-notas .fila-yo td { font-weight: 700; background: rgba(20, 184, 196, .12); }
+.tabla-grupo textarea { flex: 1; min-width: 0; border-radius: 10px; border: 1px solid var(--borde); padding: 8px; font: inherit; background: var(--fondo); color: var(--texto); }
