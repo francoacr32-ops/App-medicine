@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finlay · Estudia Medicina sin internet</title>
+<meta name="description" content="Finlay es una aplicación para estudiar Medicina desde el teléfono, sin internet: clases de 1ro a 5to año, cuestionarios, pruebas en grupo y más.">
+<meta name="theme-color" content="#07131f">
+<link rel="icon" href="img/icono-192.png" type="image/png">
+<link rel="apple-touch-icon" href="img/icono-180.png">
+<meta property="og:title" content="Finlay · Estudia Medicina sin internet">
+<meta property="og:description" content="Clases de 1ro a 5to año, cuestionarios y pruebas en grupo. Todo en tu teléfono, sin gastar datos.">
+<meta property="og:image" content="img/icono-192.png">
+<style>
+:root{--fondo:#07131f;--fondo2:#0c1f2e;--tarjeta:#102a3a;--borde:#1d4254;--texto:#eef7f8;--suave:#a9c7cf;--acento:#2fd6c3;--acento2:#12a5a5;--naranja:#f29d38}
+*{box-sizing:border-box;margin:0}
+html{scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;background:var(--fondo);color:var(--texto);line-height:1.5;-webkit-font-smoothing:antialiased}
+img,video{max-width:100%;display:block}
+a{color:var(--acento)}
+.ancho{max-width:1080px;margin:0 auto;padding:0 20px}
+header.barra{position:sticky;top:0;z-index:5;background:rgba(7,19,31,.88);backdrop-filter:blur(10px);border-bottom:1px solid #13303f}
+.barra .ancho{display:flex;align-items:center;gap:12px;height:60px}
+.marca{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.25rem;color:#fff;text-decoration:none;margin-right:auto}
+.marca img{width:34px;height:34px;border-radius:9px}
+.barra nav a{color:var(--suave);text-decoration:none;font-size:.95rem;margin-left:18px}
+.barra nav a:hover{color:#fff}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 24px;border-radius:999px;font-weight:800;text-decoration:none;font-size:1.02rem;border:2px solid transparent;cursor:pointer}
+.btn.principal{background:var(--naranja);color:#1b1203;box-shadow:0 10px 30px rgba(242,157,56,.35)}
+.btn.borde{border-color:var(--acento);color:var(--acento);background:transparent}
+.btn.chico{padding:9px 18px;font-size:.92rem}
+.hero{position:relative;overflow:hidden;padding:56px 0 40px;background:radial-gradient(circle at 20% 10%,#0f3a4a 0,var(--fondo) 62%)}
+.hero .ancho{display:grid;gap:30px;align-items:center}
+.eti{display:inline-block;background:rgba(47,214,195,.14);color:var(--acento);font-weight:700;font-size:.82rem;letter-spacing:.08em;padding:7px 14px;border-radius:999px;text-transform:uppercase}
+h1{font-size:clamp(2.3rem,7vw,3.9rem);line-height:1.05;font-weight:900;letter-spacing:-.02em;margin:16px 0 14px}
+h1 b{color:var(--acento)}
+.hero p.sub{font-size:1.15rem;color:var(--suave);max-width:34em}
+.botones{display:flex;flex-wrap:wrap;gap:12px;margin-top:26px}
+.hero-arte{display:flex;justify-content:center;align-items:flex-end;gap:0;position:relative;min-height:320px}
+.circulo{width:min(300px,70vw);aspect-ratio:1;border-radius:50%;background:#12808f;display:flex;align-items:flex-end;justify-content:center;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.circulo img{height:94%}
+section{padding:60px 0}
+section.alt{background:var(--fondo2)}
+h2{font-size:clamp(1.7rem,4.5vw,2.4rem);font-weight:900;line-height:1.15;margin-bottom:10px;letter-spacing:-.01em}
+h2 b{color:var(--acento)}
+.intro{color:var(--suave);max-width:40em;margin-bottom:30px;font-size:1.05rem}
+.rejilla{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.tarjeta{background:var(--tarjeta);border:1px solid var(--borde);border-radius:20px;padding:22px}
+.tarjeta .ico{width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.4rem;background:rgba(47,214,195,.16);margin-bottom:12px}
+.tarjeta h3{font-size:1.12rem;margin-bottom:6px}
+.tarjeta p{color:var(--suave);font-size:.97rem}
+.numeros{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;text-align:center}
+.numeros div{padding:18px 8px}
+.numeros b{display:block;font-size:clamp(2.4rem,8vw,3.6rem);font-weight:900;color:var(--acento);line-height:1}
+.numeros div:nth-child(2) b{color:#f7b25a}
+.numeros span{color:var(--suave);font-weight:600}
+.pantallas{display:flex;gap:18px;overflow-x:auto;padding:6px 2px 18px;scroll-snap-type:x mandatory}
+.pantallas figure{flex:0 0 min(240px,62vw);scroll-snap-align:center}
+.pantallas img{border-radius:26px;border:6px solid #0b1b28;box-shadow:0 18px 40px rgba(0,0,0,.5);width:100%}
+.pantallas figcaption{text-align:center;color:var(--suave);font-size:.9rem;margin-top:10px}
+.dos{display:grid;gap:30px;align-items:center}
+.video{max-width:300px;margin:0 auto;border-radius:26px;overflow:hidden;border:6px solid #0b1b28;box-shadow:0 18px 40px rgba(0,0,0,.5);background:#000}
+.video video{width:100%}
+ul.lista{list-style:none;padding:0;display:grid;gap:12px;margin-top:6px}
+ul.lista li{padding-left:34px;position:relative;color:var(--suave)}
+ul.lista li::before{content:"✓";position:absolute;left:0;top:0;width:24px;height:24px;border-radius:50%;background:var(--acento2);color:#fff;font-weight:800;font-size:.85rem;display:flex;align-items:center;justify-content:center}
+ul.lista b{color:var(--texto)}
+.pasos{counter-reset:paso;display:grid;gap:14px;margin-top:14px}
+.pasos li{list-style:none;counter-increment:paso;padding-left:46px;position:relative;color:var(--suave)}
+.pasos li::before{content:counter(paso);position:absolute;left:0;top:-2px;width:32px;height:32px;border-radius:50%;background:var(--acento2);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+.pasos b{color:var(--texto)}
+.instalar .tarjeta h3{font-size:1.3rem;margin-bottom:4px}
+.aviso{font-size:.9rem;color:var(--suave);margin-top:14px}
+.cierre{text-align:center;background:radial-gradient(circle at 50% 0,#0f3a4a 0,var(--fondo) 70%)}
+.cierre img{height:190px;margin:0 auto 6px}
+.cierre .botones{justify-content:center}
+footer{border-top:1px solid #13303f;padding:26px 0;color:#7fa3ad;font-size:.9rem;text-align:center}
+@media(min-width:820px){
+  .hero{padding:80px 0 70px}
+  .hero .ancho{grid-template-columns:1.15fr .85fr}
+  .dos{grid-template-columns:1fr 1fr}
+  .dos.invertida>:first-child{order:2}
+}
+@media(max-width:640px){.barra nav a.oculto-movil{display:none}}
+</style>
+</head>
+<body>
+
+<header class="barra"><div class="ancho">
+  <a class="marca" href="#"><img src="img/cruz.webp" alt="">Finlay</a>
+  <nav>
+    <a class="oculto-movil" href="#funciones">Funciones</a>
+    <a class="oculto-movil" href="#profesores">Profesores</a>
+    <a class="oculto-movil" href="#instalar">Instalar</a>
+  </nav>
+  <a class="btn principal chico" href="app/">Abrir Finlay</a>
+</div></header>
+
+<div class="hero"><div class="ancho">
+  <div>
+    <span class="eti">Para estudiantes de Medicina</span>
+    <h1>Estudia Medicina<br><b>sin internet</b></h1>
+    <p class="sub">Finlay pone toda la carrera en tu teléfono: las clases de 1ro a 5to año, cuestionarios como los del examen y pruebas en grupo con tus compañeros. Sin gastar datos.</p>
+    <div class="botones">
+      <a class="btn principal" href="app/">Abrir Finlay ahora</a>
+      <a class="btn borde" href="#instalar">Cómo instalarla</a>
+    </div>
+  </div>
+  <div class="hero-arte"><div class="circulo"><img src="img/doc-saluda.webp" alt="El Dr. Finlay, la mascota de la aplicación, saludando"></div></div>
+</div></div>
+
+<section class="alt"><div class="ancho numeros">
+  <div><b>+110</b><span>clases</span></div>
+  <div><b>+1500</b><span>preguntas</span></div>
+  <div><b>5</b><span>años de la carrera</span></div>
+  <div><b>0</b><span>megas para estudiar</span></div>
+</div></section>
+
+<section id="funciones"><div class="ancho">
+  <h2>Todo lo que necesitas, <b>en el bolsillo</b></h2>
+  <p class="intro">Finlay nació para un problema concreto: la conexión falla, los materiales andan regados en chats y memorias, y cada grupo estudia en un lugar distinto.</p>
+  <div class="rejilla">
+    <div class="tarjeta"><div class="ico">📚</div><h3>Clases en orden</h3><p>Organizadas por año y asignatura según el plan de estudio, numeradas como se estudian y explicadas paso a paso.</p></div>
+    <div class="tarjeta"><div class="ico">📝</div><h3>Cuestionarios</h3><p>Verdadero o falso, selección, enlazar y completar, como en el examen. Cada respuesta viene explicada.</p></div>
+    <div class="tarjeta"><div class="ico">⏱</div><h3>Examen de práctica</h3><p>Con cronómetro y nota de 2 a 5. Lo que fallas vuelve en el repaso del día hasta que lo domines.</p></div>
+    <div class="tarjeta"><div class="ico">👥</div><h3>Prueba en grupo</h3><p>Manda la prueba por WhatsApp o Zapya y empiecen todos a la misma hora. Finlay arma la tabla de notas.</p></div>
+    <div class="tarjeta"><div class="ico">📎</div><h3>Tus conferencias</h3><p>Añade tus PDF, Word y PowerPoint. Se ven con su formato original y Finlay les crea un cuestionario.</p></div>
+    <div class="tarjeta"><div class="ico">🏆</div><h3>Trofeos y racha</h3><p>Puntos, niveles y medallas que te animan a estudiar un poco cada día.</p></div>
+  </div>
+</div></section>
+
+<section class="alt"><div class="ancho">
+  <h2>Así se ve <b>por dentro</b></h2>
+  <p class="intro">Desliza para ver algunas pantallas.</p>
+  <div class="pantallas">
+    <figure><img src="img/temas.webp" alt="Pantalla de temas por año" loading="lazy"><figcaption>La carrera por años</figcaption></figure>
+    <figure><img src="img/clase.webp" alt="Una clase explicada" loading="lazy"><figcaption>Clases explicadas</figcaption></figure>
+    <figure><img src="img/cuest.webp" alt="Un cuestionario" loading="lazy"><figcaption>Cuestionarios</figcaption></figure>
+    <figure><img src="img/evaluaciones.webp" alt="Pantalla de evaluaciones" loading="lazy"><figcaption>Evaluaciones</figcaption></figure>
+    <figure><img src="img/biblioteca.webp" alt="Biblioteca médica" loading="lazy"><figcaption>Biblioteca</figcaption></figure>
+    <figure><img src="img/logros.webp" alt="Logros y medallas" loading="lazy"><figcaption>Logros</figcaption></figure>
+  </div>
+</div></section>
+
+<section><div class="ancho dos">
+  <div class="video"><video controls playsinline preload="none" poster="img/video.jpg"><source src="img/finlay.mp4" type="video/mp4"></video></div>
+  <div>
+    <h2>Finlay en <b>30 segundos</b></h2>
+    <p class="intro">Un vistazo rápido a lo que hace la aplicación.</p>
+    <ul class="lista">
+      <li><b>Se instala una vez</b> y funciona sin conexión.</li>
+      <li><b>Se pasa de teléfono a teléfono</b> por WhatsApp, Zapya o Bluetooth.</li>
+      <li><b>El Dr. Finlay te guía</b>: en cada pantalla te explica para qué sirve.</li>
+    </ul>
+  </div>
+</div></section>
+
+<section class="alt" id="profesores"><div class="ancho dos invertida">
+  <div>
+    <span class="eti">Para profesores</span>
+    <h2 style="margin-top:14px">La app propone,<br><b>el profesor valida</b></h2>
+    <ul class="lista">
+      <li><b>Profesor verificado:</b> cada profesor recibe un código y queda identificado en la aplicación.</li>
+      <li><b>Revisión de contenidos:</b> corrige las clases y quita las preguntas que no sirvan.</li>
+      <li><b>Prueba del profesor:</b> el archivo va sin las respuestas; los estudiantes envían las suyas y el teléfono del profesor califica.</li>
+      <li><b>Contenido oficial:</b> lo aprobado se publica firmado y llega a todos los estudiantes.</li>
+    </ul>
+  </div>
+  <div class="hero-arte" style="min-height:0"><div class="circulo" style="width:min(250px,60vw)"><img src="img/doc-carpeta.webp" alt="El Dr. Finlay con una carpeta" loading="lazy"></div></div>
+</div></section>
+
+<section id="instalar" class="instalar"><div class="ancho">
+  <h2>Cómo <b>instalarla</b></h2>
+  <p class="intro">Elige tu teléfono.</p>
+  <div class="rejilla">
+    <div class="tarjeta">
+      <h3>🤖 Android</h3>
+      <ol class="pasos">
+        <li><b>Pide el archivo</b> «Finlay.apk» a un compañero por WhatsApp, Zapya o Bluetooth.</li>
+        <li><b>Tócalo</b> y acepta instalarlo.</li>
+        <li><b>Ábrela</b>: ya trae las clases dentro y funciona sin internet.</li>
+      </ol>
+      <p class="aviso">También puedes usarla desde el navegador con el botón «Abrir Finlay».</p>
+    </div>
+    <div class="tarjeta">
+      <h3>🍎 iPhone</h3>
+      <ol class="pasos">
+        <li><b>Abre esta página en Safari</b> y toca «Abrir Finlay».</li>
+        <li>Toca <b>Compartir</b> y luego <b>Añadir a pantalla de inicio</b>.</li>
+        <li><b>Carga las clases</b> con el archivo que te pase un compañero.</li>
+      </ol>
+      <a class="btn borde chico" style="margin-top:16px" href="app/">Abrir Finlay</a>
+    </div>
+  </div>
+</div></section>
+
+<section class="cierre"><div class="ancho">
+  <img src="img/doc-victoria.webp" alt="El Dr. Finlay celebrando" loading="lazy">
+  <h2>Tu carrera, <b>en el bolsillo</b></h2>
+  <p class="intro" style="margin:0 auto 6px">Pídela, instálala y pásala a tu grupo.</p>
+  <div class="botones"><a class="btn principal" href="app/">Abrir Finlay ahora</a></div>
+</div></section>
+
+<footer><div class="ancho">Finlay · Estudio médico — hecha por un estudiante de Medicina, para estudiantes de Medicina.</div></footer>
+
+</body>
+</html>
